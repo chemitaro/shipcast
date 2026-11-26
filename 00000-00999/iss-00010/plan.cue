@@ -3,12 +3,14 @@ package spec
 steps: {
 	"S-01": {title: "型とJSONの行き来", realizes: ["R-01", "R-03"], session: "impl"}
 	"S-02": {title: "SQLiteの置き場", realizes: ["R-02", "R-03"], after: ["S-01"], session: "impl"}
+	"S-03": {title: "日誌のパスと前付けの契約", realizes: ["R-04"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
 	"T-01": {title: "型をJSONにして戻すと同じになる", verifies: ["R-01"]}
 	"T-02": {title: "保存して読み出せる", verifies: ["R-02"]}
 	"T-03": {title: "同じ出来事の二度目の保存で件数が増えない", verifies: ["R-03"]}
+	"T-04": {title: "日誌のパスと前付けを書いて読むと元に戻り、欠けた項目で失敗する", verifies: ["R-04"]}
 }
 
 execution: sessions: {

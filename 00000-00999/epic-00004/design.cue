@@ -13,7 +13,7 @@ design: {
 		| `claude` | `claude -p --model <model> --tools ""`（予備） |
 		| `fake` | 入力から決まった応答を返す（試験とデモの予行） |
 
-		すべての経路は、呼ぶ前に `redact()` を通す。時間の上限（既定10分）を付ける。
+		すべての経路は、共通の入口（`GuardedRoute`）で、`antigravity` の守り → `redact()` → 経路の実装、の順に通る。時間の上限（既定10分）を付ける。子のプロセスを作る関数は差し替えられ、試験では偽のものを使う。
 		"""
 		satisfies: ["R-01", "F-02", "F-03"]
 	}
@@ -30,7 +30,7 @@ design: {
 	"D-04": {
 		title: "日誌のMarkdownの形"
 		text: """
-		置き場は `<journal_dir>/<repo>/<年>/<YYYY-MM-DD>.md`。デザインシステムのタグを使う（SpecDockの説明資料と同じ）。
+		パスと前付けは、全Epicの共通の契約（epic-00002 の D-05）に従う。本文はデザインシステムのタグを使う（SpecDockの説明資料と同じ）。
 
 		```markdown
 		---
@@ -65,11 +65,21 @@ design: {
 		:::
 
 		:::tip 発信の芽（ネタポイント 7）
-		- この話題はXに書けます（E5が付ける）
+		- この話題はXに書けます（E5が D-05 の拡張点で付ける）
 		:::
 		```
 		出来事のない日は、前付けと「大きな動きはありませんでした。」の1行。
 		"""
 		satisfies: ["R-03", "R-04"]
+	}
+	"D-05": {
+		title: "日誌の組み立てと拡張点"
+		text: """
+		`build_entry(repo, day, stories, events, body_md, *, extensions) -> str`（iss-00016）。
+
+		- `events` から `:::metrics` を数える（書き手に数えさせない）。
+		- `extensions` は `JournalExtension`（`render(repo, day, stories, events) -> str | None`）の一覧。既定の一覧 `shipcast.write.EXTENSIONS` は、このEpicでは空。E5の iss-00019 が「発信の芽」を登録する。
+		"""
+		satisfies: ["R-05", "R-06"]
 	}
 }

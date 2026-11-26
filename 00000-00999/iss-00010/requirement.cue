@@ -22,4 +22,11 @@ requirements: {
 		title: "同じ出来事を二度保存しても1件のまま"
 		acceptance: ["Eventのidは、出所（source）と元のID（SHAなど）から決まる"]
 	}
+	"R-04": {
+		title: "日誌のパスと前付けの契約（epic-00002 の D-05）が `shipcast.model` にある"
+		acceptance: [
+			"`journal_path(journal_dir, \"shipcast\", date(2026, 11, 26))` が `<journal_dir>/shipcast/2026/2026-11-26.md` を返す",
+			"`write_frontmatter` で書いて `read_frontmatter` で読むと元に戻り、必須の項目が欠けると項目を名指して失敗する",
+		]
+	}
 }

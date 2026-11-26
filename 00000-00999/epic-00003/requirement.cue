@@ -16,10 +16,12 @@ requirements: {
 	}
 	"R-02": {
 		title: "SpecDockの、その日のScopeとtodoの変化を集める"
+		text:  "Scopeの時刻は、GitHubのIssueの `createdAt`・`closedAt` を `gh issue list` で読むだけで取る（本人の決定 23）。"
 		acceptance: ["その日に作られた・閉じたScope、開いている本人待ちのtodoが、Eventとして保存される"]
 	}
 	"R-03": {
 		title: "Orcaの、そのrepositoryでのその日の会話の記録を集める（任意）"
+		text:  "`orca agent list --json` と `orca agent read --json` で読む。"
 		acceptance: ["Orcaが動いていれば、本人とエージェントの発言がEventとして保存される"]
 	}
 	"R-04": {
