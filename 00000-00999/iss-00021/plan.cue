@@ -4,7 +4,7 @@ goal: "新しい `run.py` に、CLI・日の決め方・repositoryごとの処�
 
 steps: {
 	"S-01": {
-		status:   "todo"
+		status:   "doing"
 		title:    "run のコマンドと記録（`run.py` の `configure`・`run`・`previous_day`、`cli.py` の接続）"
 		text:     "D-01・D-03。T-01・T-02・T-03・T-04 を `tests/test_run.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/run.py` に `previous_day`・`configure`・`run`・`journal_extensions_for`（lock なし、TCC の案内なし、読み取りの確かめなし）を書き、`cli.py` の `run` の葉に `run_command.configure` を渡し、`tests/test_cli.py` の未実装の一覧から `run` を外して通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02"]
