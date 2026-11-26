@@ -25,6 +25,10 @@ SpecDockのCLIの機械向けの出力から、その日のScopeの作成・終�
 - カタログの内部の形は解釈しない
 :::
 
+:::note 保証レベルと前提の更新（2026-11-26）
+保証レベルは **`light`** です。Scopeの作成日・終了日は、`spec-dock scope list` の出力に時刻がないため、`gh issue list --state all --json number,title,state,createdAt,closedAt,url`（読むだけ）で取ります。todoは `spec-dock todo list --status all --json` で読みます。iss-00011 の共通の約束の後に始めます。
+:::
+
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>

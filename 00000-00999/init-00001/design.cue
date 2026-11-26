@@ -51,6 +51,16 @@ design: {
 		text:  "`shipcast run` が全repositoryを順に処理し、launchdが毎日3時に呼ぶ。ネタポイントは話題ごとにためて、しきい値を超えたら日誌に印を付け、`shipcast draft x` が下書きを作る。どちらも外へは送らない。"
 		satisfies: ["R-05", "R-06", "R-07"]
 	}
+	"D-07": {
+		title: "全Epicの共通の契約：日誌のパスと前付け"
+		text: """
+		日誌のMarkdownは、書く段（epic-00004）が作り、描く段（epic-00005）とおまけ（epic-00006）が読む。両者をつなぐ契約は epic-00002 の D-05 に1か所だけ置き、コードでは `shipcast.model` の定数と関数にする。
+
+		- パス：`<journal_dir>/<repo>/<YYYY>/<YYYY-MM-DD>.md`
+		- 前付け：`title`・`lead`・`category`・`date`・`repo`・`analyst`・`writer`・`generated_at`、版の `schema: 1`
+		"""
+		satisfies: ["R-01", "R-04"]
+	}
 }
 
 compatibility: "最初の版。データの約束には `schema = 1` を付け、後で変えるときは版を上げる。"

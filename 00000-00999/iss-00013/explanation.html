@@ -25,6 +25,10 @@ status: 仕様を確定
 - 設定の `orca = false` では集めない
 :::
 
+:::note 保証レベルと前提の更新（2026-11-26）
+保証レベルは **`light`** です。会話は `orca agent list --json`（`worktreeId` のpathと `updatedAt` で絞る）と `orca agent read <id> --limit 100 --json`（`kind` が `message` の発言だけ）で読みます。発言そのものには時刻がないので、その日の判定は会話の `updatedAt` で行います。
+:::
+
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>

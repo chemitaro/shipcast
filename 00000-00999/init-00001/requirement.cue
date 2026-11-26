@@ -4,7 +4,7 @@ schema: "specdock/v1"
 
 assurance: {
 	level:  "standard"
-	reason: "新しい道具を一から作る。外への投稿はせず、日誌は手元の別の置き場に書くので、失敗しても既存のrepositoryや外部に影響せず、作り直せる"
+	reason: "新しい道具を一から作る。外への投稿はせず、日誌は手元の別の置き場に書くので、失敗しても既存のrepositoryや外部に影響せず、作り直せる。外部のモデルへの送信の境界（epic-00004）とHTTPの配信の防御（epic-00005）は、そのEpicとIssueを strict にして守る"
 }
 
 purpose: "AIエージェント（ソフトウェアファクトリー）が進めた開発を、本人が毎朝読んで理解できるように、プロジェクトごと・日付ごとの開発日誌を自動で作る。おまけとして、ネタポイントがたまったら発信の下書きを出す。"
@@ -102,17 +102,22 @@ failures: {
 constraints: [
 	"repositoryはpublic。個人の設定、状態、日誌はrepositoryの外に置く",
 	"費用はサブスクリプションの範囲（Codex、Antigravity）。従量のAPIは使わない",
-	"ハッカソン（2時間）では、仕様のレビューと品質ゲートを行わない（本人の決定）",
+	"開発は通常の `coding-task` の流れで進める。仕様のレビュー、区切りのレビュー、最終品質ゲートを、各Issueの保証レベルの既定どおりに行う（本人の決定 18。以前の「行わない」は取り消し）",
+	"統括（Antigravity）がIssueを単位に、OrcaのworktreeとSpecDockで作業者に依頼する。タスク担当は Claude Code（Opus 5.5）、ロジックの実装担当は Codex（GPT-6.2 Sol）、画面のデザイン・レイアウト・表示の実装は Opus 5.5 が直接行う（本人の決定 19・20）",
+	"PRのマージは統括が行い、タスク担当と実装担当はマージしない（本人の決定 21）",
+	"エージェント（Claude Code・Codex・Orcaの作業者）は `agy` を呼ばない。試験と予行は `fake` の経路を使う",
 ]
 
 decisions: [
 	"中心は開発日誌、発信はおまけ（`content/decisions/20261126-journal-first.md`）",
 	"日誌は独自タグ付きのMarkdown、Gitの外、Tailscaleで読む、夜3時に自動（`content/decisions/20261126-journal-format-and-hackathon-plan.md`）",
 	"Orcaの会話の記録は、分析と書き手のモデルに全文を渡してよい（秘密らしい文字列は伏せる）",
+	"開発の進め方の改定：通常の `coding-task`、統括のマージ、画面はOpus 5.5、保証レベルの見直し（`content/decisions/20261126-journal-format-and-hackathon-plan.md` の 18〜24）",
+	"SpecDockの収集は `gh issue list --json number,title,state,createdAt,closedAt,url` を読むだけで併用する（同 23）",
 ]
 
 questions: [
 	"GPT-6.2より安いCodexのモデル（Luna など）の正確な名前と、分析に足りるか（E3で確かめる）",
-	"Orca CLIで、repositoryと期間を指定して会話の記録を読む方法（E2で確かめる）",
+	"Orca CLIの会話の読み方の細部（`orca agent list --json` の `worktreeId`・`updatedAt` と `orca agent read --json` の `entries` は確かめ済み。会話の題名の項目と、100件を超える会話の扱いは iss-00013 で確かめる）",
 	"`agy -p` でモデル・思考の深さ・道具の禁止を指定する引数（E3で確かめる）",
 ]

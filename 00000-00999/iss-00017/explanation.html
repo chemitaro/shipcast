@@ -26,6 +26,10 @@ status: 仕様を確定
 - READMEにTailscaleの手順
 :::
 
+:::note 保証レベルと前提の更新（2026-11-26）
+保証レベルは **`strict`** です。tailnetから読まれるHTTPの配信の境界なので `strict` にしました。パスの検査（`..`・符号化・symlink）、`</script` と `<!--` の置き換え、CSPのヘッダーを1か所ずつの関数にします。ページの枠と見た目は、本人の方針で Opus 5.5 が直接実装します。
+:::
+
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>

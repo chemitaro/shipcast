@@ -26,6 +26,10 @@ status: 仕様を確定
 - Codexのより安いモデルの名前を確かめる
 :::
 
+:::note 保証レベルと前提の更新（2026-11-26）
+保証レベルは **`strict`** です。外部のモデルへの送信の唯一の境界（`redact()`）と、エージェントの中から `agy` を呼ばない守りを持つため、`strict` にしました。仕様のレビューにはChatGPTの2人目が付きます。印の環境変数は `CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_*` です。試験では偽のrunnerだけを使い、本物の `agy` を起動しません。
+:::
+
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>
