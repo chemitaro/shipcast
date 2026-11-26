@@ -13,6 +13,11 @@ from shipcast.model import Entry, Event, ModelError, Story, _aware, _repo_id, _t
 STATE_SCHEMA_VERSION = 1
 STATE_FILENAME = "state.sqlite3"
 
+_INSERT_NETA = """
+INSERT OR IGNORE INTO neta_ledger (story_id, repo_id, points, consumed)
+VALUES (?, ?, ?, 0)
+"""
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
@@ -152,8 +157,9 @@ class Store:
         return [Event.from_json(text) for (text,) in rows]
 
     def save_stories(self, stories: Iterable[Story]) -> int:
+        batch = list(stories)
         with self._conn:
-            return self._conn.executemany(
+            count = self._conn.executemany(
                 """
                 INSERT INTO stories (id, repo_id, date, json) VALUES (?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET repo_id = excluded.repo_id,
@@ -161,9 +167,13 @@ class Store:
                 """,
                 (
                     (story.id, story.repo_id, story.date.isoformat(), story.to_json())
-                    for story in stories
+                    for story in batch
                 ),
             ).rowcount
+            self._conn.executemany(
+                _INSERT_NETA, ((story.id, story.repo_id, story.neta.score) for story in batch)
+            )
+        return count
 
     def stories_for(self, repo_id: str, day: date) -> list[Story]:
         rows = self._conn.execute(
@@ -222,10 +232,7 @@ class Store:
         with self._conn:
             return (
                 self._conn.execute(
-                    """
-                INSERT OR IGNORE INTO neta_ledger (story_id, repo_id, points, consumed)
-                VALUES (?, ?, ?, 0)
-                """,
+                    _INSERT_NETA,
                     (story.id, story.repo_id, story.neta.score),
                 ).rowcount
                 == 1
@@ -246,6 +253,17 @@ class Store:
             (repo_id,),
         )
         return [story_id for (story_id,) in rows]
+
+    def unconsumed_stories(self, repo_id: str, *, limit: int | None = None) -> list[Story]:
+        query = """
+            SELECT stories.json FROM neta_ledger
+            JOIN stories ON stories.id = neta_ledger.story_id
+            WHERE neta_ledger.repo_id = ? AND consumed = 0 AND points > 0
+            ORDER BY points DESC, neta_ledger.rowid
+            """
+        row_limit = limit if type(limit) is int and limit >= 1 else -1
+        rows = self._conn.execute(query + "LIMIT ?", (repo_id, row_limit))
+        return [Story.from_json(text) for (text,) in rows]
 
     def consume_neta(self, story_ids: Iterable[str]) -> int:
         with self._conn:
