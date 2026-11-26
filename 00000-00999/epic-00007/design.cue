@@ -1,23 +1,8 @@
 package spec
 
-// 設計（Epic）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Epic の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "`shipcast run`", text: "`--date`（既定は前日）、`--repo`（既定は全部）。repositoryごとに collect → analyze → write を呼び、例外は記録して次へ。全部が成功なら終了コード0、1つでも失敗なら1。", satisfies: ["R-01", "R-02"]}
+	"D-02": {title: "lock", text: "状態の置き場の `run.lock` を `fcntl.flock` で取る。取れなければ記録して終了コード0で終える。", satisfies: ["F-01"]}
+	"D-03": {title: "launchdの登録", text: "`com.shipcast.nightly.plist`。`StartCalendarInterval` は Hour 3 Minute 0。`ProgramArguments` は、`uv tool install` で入れた `shipcast` の絶対path（worktreeのcheckoutからは動かさない）と `run`。標準出力と誤りは `logs/`。登録は本人の環境への変更なので、本人が実行する。", satisfies: ["R-03"]}
+	"D-04": {title: "TCCの失敗の見分け", text: "Gitの誤りの文に `Operation not permitted` があれば、許可の付け方（フルディスクアクセス）を記録に添える。", satisfies: ["F-02"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]

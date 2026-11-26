@@ -1,48 +1,30 @@
 package spec
 
-// 要件（Epic）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "standard"
 	reason: "手元の配信だけで、外へは公開しない。配信を止めれば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Epic が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "日誌のMarkdownのファイルを、配信のときにデザインシステムでWebページにして読めるようにする。HTMLは保存しない。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {
+		title: "各日の日誌が、デザインシステムで描かれたWebページとして読める"
+		acceptance: ["`shipcast serve` の `/<repo>/<日付>` で、タグ（summary、warning など）が部品として描かれる"]
+	}
+	"R-02": {
+		title: "表紙と、repositoryごとの日付の一覧がある"
+		acceptance: ["`/` に全repositoryの最新の日誌がカードで並ぶ", "`/<repo>/` に日付の一覧が新しい順に並ぶ"]
+	}
+	"R-03": {
+		title: "Tailscaleで、tailnetの端末から読める"
+		acceptance: ["配信は既定で 127.0.0.1 に立ち、READMEに、本人がTailscaleで公開する1回の手順がある"]
+	}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {title: "デザインシステムのファイルが見つからないときは、場所の設定の仕方を示して止まる"}
+	"F-02": {title: "日誌の置き場の外のファイルを返さない（pathの `..` を拒む）"}
 }
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]

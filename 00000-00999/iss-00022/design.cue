@@ -1,23 +1,6 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "`shipcast.schedule`", text: "plistの文字列を組む関数を単独で試験できるようにする。`--load` を付けたときだけ `launchctl bootstrap gui/<uid>` を呼ぶ。", satisfies: ["R-01", "R-02"]}
+	"D-02": {title: "README", text: "導入と許可の手順。", satisfies: ["R-03"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]

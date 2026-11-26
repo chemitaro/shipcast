@@ -1,48 +1,21 @@
 package spec
 
-// 要件（Issue）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "light"
-	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る。配信は手元とtailnetだけ"
+	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "`shipcast serve` で、日誌のMarkdownをデザインシステムで描くページとして返す。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {title: "`/<repo>/<日付>` で、日誌のMarkdownを epic-00005 の D-01 の形に包んで返す"}
+	"R-02": {title: "`/_ds/` で、デザインシステムのファイル（ds.css、ds.js、vendor）を返す"}
+	"R-03": {title: "既定で 127.0.0.1 に立ち、READMEにTailscaleでの公開の手順を書く"}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {title: "デザインシステムが見つからないときは、設定の仕方を示して止まる"}
+	"F-02": {title: "`..` を含むpathや置き場の外は404にする"}
 }
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]

@@ -1,48 +1,21 @@
 package spec
 
-// 要件（Issue）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "light"
 	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "`shipcast run` で、登録した全repositoryの日誌を一度に作る。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {title: "全repository（または `--repo`）の、`--date`（既定は前日）の日誌を、collect → analyze → write で作る"}
+	"R-02": {title: "repositoryごとの成功と失敗を実行の記録に残し、1つの失敗でほかを止めない"}
+	"R-03": {title: "同じ日の再実行で重複しない"}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {title: "前の実行が動いているときは、重ねずに終わる"}
+	"F-02": {title: "TCCで読めないときは、直し方を記録に添える"}
 }
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]
