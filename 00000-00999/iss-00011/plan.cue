@@ -8,6 +8,7 @@ steps: {
 		text:     "D-01、D-02。T-02 のうち `collect_repo` の部分と T-05 を `tests/test_collect.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/collect/base.py` に `CollectError`・`CollectResult`・`Collector`・`day_bounds`・`RepoCollection`・`collect_repo` を、`src/shipcast/collect/__init__.py` に `COLLECTORS = ()`（S-03 でGitを足す）を書いて通す（Green）。架空のcollectorを試験の中に書く。完了の条件：その試験が通り、`uv run ruff check` が通る。"
 		realizes: ["R-01"]
 		session:  "impl"
+		status:   "done"
 	}
 	"S-02": {
 		title:    "`shipcast collect` のコマンド（`shipcast.collect.command`、`shipcast.cli`）"
@@ -15,6 +16,7 @@ steps: {
 		realizes: ["R-01", "F-02"]
 		after:    ["S-01"]
 		session:  "impl"
+		status:   "done"
 	}
 	"S-03": {
 		title:    "Gitのcollector（`shipcast.collect.git`）と登録"
@@ -22,6 +24,7 @@ steps: {
 		realizes: ["R-02", "R-03", "F-01"]
 		after:    ["S-02"]
 		session:  "impl"
+		status:   "done"
 	}
 }
 
@@ -66,7 +69,7 @@ gates: {
 	checkpoints: "なし。理由：手順は3つで、1人の実装担当が続けて書き、どれもこのIssueの中の新しいmoduleで、cli.py の変更は2行だけ。後の手順が依る境界（`Collector`・`collect_repo`）は S-01 の試験と最終品質ゲートの `api-contract` の観点で確かめる。後のIssueはこのPRがマージされるまで読み込まないので、途中で止めて見る利得が小さい"
 	final_quality_gate: {
 		scope:          "開始のコミット（統括が作ったworktreeの作業の始めの `HEAD`、`f68349a`）から S-03 の後の `HEAD` まで"
-		perspectives:   ["functional-correctness", "requirements-closure", "test-adequacy", "api-contract", "security"]
+		perspectives:   ["functional-correctness", "requirements-closure", "test-adequacy", "api-contract", "security-baseline"]
 		test_commands:  ["uv sync --locked", "uv run ruff check", "uv run pytest -q"]
 		record_paths:   ["spec-dock/initiatives/00000-00999/iss-00011/report.md（SpecDockの自動の保存で記録する。Gitのcommitは要らない）"]
 		second_opinion: "none"
