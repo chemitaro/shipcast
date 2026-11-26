@@ -24,6 +24,22 @@ ID: "iss-00016"
 - 2回目の P3（直さず申し送り）：(1) `_inline` が先頭の `*`・`` ` `` を常に打ち消すので、`**太字**` や `` `code` `` で始まる行の見た目が崩れる（中身は失われない）。(2) W-05 の `=`・`-` だけの行の検査はブロックの印を除く前に行うため、引用の中の setext 見出し（`> ===`）が通る（見出しが1つ増える見た目だけ）
 - 結果のファイル：shipcastの `.workbench/spec-review/iss-00016/`（`round-1.json`・`round-1b.json`・`round-2.json` と `.check.json`、`review-response.md`）
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（キャンペーン `iss-00016-fqg-1` の attempt 01）
+- 合格のコミット：`24391b250ac4c4e865a400f428681512e9ce1901`（範囲 `36eea14..24391b2`、clean）
+- 主：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。pass、P0 0・P1 0・P2 0・P3 1、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline
+- P3：引用の中の setext 見出し（`> 段落` の次の `> ===`）が W-05 を通る（仕様レビュー2回目の P3 と同じ。仕様どおり。後の改善の候補）
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（760 passed）がすべて exit 0（タスク担当の試験レーン）
+- 2人目：none（standard）
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00016-fqg-1/closure.md`
+
+### PR と CI（2026-11-26）
+
+- PR：https://github.com/chemitaro/shipcast/pull/33（`chemitaro/iss-00016` → `main`、`Refs #16`、自動で閉じる語句なし）。head `24391b250ac4c4e865a400f428681512e9ce1901`（合格のコミットと同じ。記録のみのコミットなし）
+- CI：`github-pr-checks` の observer で exit 0、`OBSERVED_CI_PASS`（2026-11-26T14:25:43Z）。Actions の `ci`（run 45838693277、event pull_request、head 24391b2）が success。coverage ACTIONS_AND_COMMIT_STATUSES、expected_inventory UNSPECIFIED。GitHub は OPEN・非draft・MERGEABLE・CLEAN（base `4682425`、試しのマージ `37dd9bc`）
+- マージと `spec-dock work finish` は統括が行う
+
 ## Outcome
 
 - S-01 — `54373b30b5038489de9d29507fbb8e28a6f7a5f9`。書き手の入力指示と応答の検査を追加。検査を JSON 全体と各フィールドに分け、エラー文には応答の値を載せない。引用内の `> ===` はレビュー時の申し送りどおり許容する。
