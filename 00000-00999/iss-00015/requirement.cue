@@ -61,7 +61,7 @@ requirements: {
 		title: "話題を状態に保存してから、次の段へ渡す"
 		text:  "形に合った話題の一覧を `Store.save_stories` で保存してから返す。出来事は、モデルを呼ぶ前に `Store.add_events` で保存する（epic-00004 の F-01 の「材料はモデルを呼ぶ前に保存」。収集が保存済みなら、重複は捨てられる）。"
 		acceptance: [
-			"`analyze` が返る前に、`Store.stories_for(repo_id, day)` で同じ話題が読める（返した一覧と等しい）",
+			"`analyze` が返る前に、`Store.stories_for(repo_id, day)` で同じ話題が読める（その日の話題がまだ保存されていない状態から始めれば、返した一覧と等しい。同じ日の分析し直しは design.cue の risks）",
 			"モデルを呼ぶ時点で、渡した出来事が状態に保存されている",
 		]
 	}

@@ -11,14 +11,14 @@ steps: {
 	}
 	"S-02": {
 		title:    "`analyze` の関数と頼み直し、失敗（`AnalyzeFailed`）"
-		text:     "D-01（手順1・2・4・5・7）・D-03。T-01（`analyze` の部分）、T-02、T-03、T-06、T-08 を先に書いて Red、`analyze`・`MAX_ATTEMPTS`・`AnalyzeFailed` を書いて Green。この手順では、話題の保存と出来事の保存の試験（T-04）はまだ書かない。完了の条件：`test_commands` がすべて終了コード0。"
+		text:     "D-01（手順1・2・4・5・7と、手順6のうち `Story` の組み立て）・D-03。T-01（`analyze` の部分）、T-02、T-03、T-06、T-08 を先に書いて Red、`analyze`・`MAX_ATTEMPTS`・`AnalyzeFailed` を書いて Green。この手順では、話題の保存と出来事の保存の試験（T-04）はまだ書かない。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02", "F-01"]
 		after:    ["S-01"]
 		session:  "impl"
 	}
 	"S-03": {
 		title:    "保存（出来事はモデルを呼ぶ前、話題は返す前）"
-		text:     "D-01（手順3・6）。T-04 と、T-03・T-06 の「出来事は残り、話題は保存されない」の確かめを先に書いて Red、`store.add_events` と `store.save_stories` の呼び出しを足して Green。完了の条件：`test_commands` がすべて終了コード0。"
+		text:     "D-01（手順3と、手順6のうち `save_stories` の呼び出し）。T-04 と、T-03・T-06 の「出来事は残り、話題は保存されない」の確かめを先に書いて Red、`store.add_events` と `store.save_stories` の呼び出しを足して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-03", "F-01"]
 		after:    ["S-02"]
 		session:  "impl"
@@ -29,8 +29,8 @@ tests: {
 	"T-01": {title: "fake の応答（2つの話題、架空の出来事3件）から、`analyze` が2つの `Story` を応答の順で返し、`title`・`what`・`why`・`notice`・`waiting`・`neta`（`score`・`reason`・`channels`）・`event_ids` が応答のとおり、`id` が `story_id(repo_id, day, event_ids)`、`repo_id`・`date` が引数の値。`notice`・`waiting`・`neta.reason`・`neta.channels` を省いた応答では空になる。知らない鍵は捨てられる。応答が ```` ```json ```` の囲みと前後の空白に包まれていても読める。`parse_stories` も同じ応答から同じ値を返し、誤りが空", verifies: ["R-01"]}
 	"T-02": {title: "1回目が壊れたJSON（または V-06 の誤り）、2回目が正しい応答の `responder` で、呼び出しが2回、2回目の prompt が `json.loads` で読め、`events` が1回目と同じ、`previous_errors` に1回目の誤り（場所 `応答` か `stories[0].neta.score` を含む文）が入る。1回目が正しければ呼び出しは1回で、prompt に `previous_errors` がない。どの呼び出しも `want_json=True` で、`responder` が受け取る system が、`prompts/analyze.md` の本文の後に `\\n\\n` と `shipcast.models.JSON_INSTRUCTION` を足したものと等しい（本文は `redact()` を通しても変わらない文にする）", verifies: ["R-02"]}
 	"T-03": {title: "2回とも形が合わない `responder` で、呼び出しがちょうど2回、`AnalyzeFailed` が上がり、`attempts == 2`、`errors` が2回目の誤り、文が「分析の応答が2回とも決まった形になりませんでした」で始まり、応答の本文（試験で入れた目印の文字列）を含まない。`stories_for(repo_id, day)` が空で、`events_for` で渡した出来事が読める（S-03 で足す）", verifies: ["F-01"]}
-	"T-04": {title: "`analyze` が返った後、`Store.stories_for(repo_id, day)` が返した一覧と等しい。`responder` の中で `store.events_for(repo_id, day, tz=...)` を読むと、渡した出来事がすべてある（モデルを呼ぶ前に保存されている）。収集で保存済みの出来事を渡しても誤りにならず、件数が増えない", verifies: ["R-03"]}
-	"T-05": {title: "`parse_stories` の誤りの表（パラメーター化）：V-01（JSONでない、空、深すぎる入れ子で `RecursionError`）、V-02（配列が全体、`stories` がない・物）、V-03（空の `stories`）、V-04（`what` がない・空白だけ・数）、V-05（`notice` が文字列）、V-06（`score` が `-1`・`4`・`1.5`・`\"2\"`・`true`、`neta` がない、`channels` に数）、V-07（`event_ids` が空・入力にないID・同じ話題で重なる）、V-08（2つの話題が同じ出来事を含む）。それぞれ誤りが1件以上で、期待する場所の文字列を含み、話題の一覧が空。誤りの文に、応答に入れた目印の値を含まない。30件の話題がすべて誤りのとき、誤りは21件（20件と「ほかにも誤りがあります」）", verifies: ["R-01", "R-02"]}
+	"T-04": {title: "話題のない新しい `Store` で、`analyze` が返った後、`Store.stories_for(repo_id, day)` が返した一覧と等しい。`responder` の中で `store.events_for(repo_id, day, tz=...)` を読むと、渡した出来事がすべてある（モデルを呼ぶ前に保存されている）。収集で保存済みの出来事を渡しても誤りにならず、件数が増えない", verifies: ["R-03"]}
+	"T-05": {title: "`parse_stories` の誤りの表（パラメーター化）：V-01（JSONでない、空、深すぎる入れ子で `RecursionError`）、V-02（配列が全体、`stories` がない・物）、V-03（空の `stories`）、V-04（`what` がない・空白だけ・数）、V-05（`notice` が文字列）、V-06（`score` が `-1`・`4`・`1.5`・`\"2\"`・`true`、`neta` がない、`channels` に数）、V-07（`event_ids` が空・入力にないID・同じ話題で重なる）、V-08（2つの話題が同じ出来事を含む）、V-09（`title` と `notice` の要素と `neta.reason` に、JSONのエスケープ `\\ud800` で入れた対のないサロゲート）。それぞれ誤りが1件以上で、期待する場所の文字列を含み、話題の一覧が空。誤りの文に、応答に入れた目印の値を含まない。30件の話題がすべて誤りのとき、誤りは21件（20件と「ほかにも誤りがあります」）", verifies: ["R-01", "R-02"]}
 	"T-06": {title: "`responder` が `RouteFailed` を投げると、`analyze` がそのまま `RouteFailed` を投げ（`AnalyzeFailed` に包まない）、呼び出しは1回、話題は保存されず、出来事は残る（S-03 で足す）", verifies: ["F-01"]}
 	"T-07": {title: "`prompts/analyze.md` が `importlib.resources` で読め、`ネタポイント`・`変化の大きさ`・`読者への価値`・`見せやすさ`・`previous_errors`・`event_ids`・`stories` を含む", verifies: ["R-01", "R-02"]}
 	"T-08": {title: "出来事が0件なら、`responder` が呼ばれず、`[]` が返り、`stories_for` が空。`repo_id` の違う出来事を混ぜると `ValueError` で、`responder` が呼ばれず、何も保存されない", verifies: ["R-01"]}

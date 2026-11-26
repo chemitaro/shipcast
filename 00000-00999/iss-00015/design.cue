@@ -42,6 +42,8 @@ design: {
 		`route.complete` が投げる例外（`RouteError` とその子、`TypeError` など）は、受け止めず、頼み直さず、そのまま呼ぶ側へ投げる。そのとき話題は保存されず、手順3で保存した出来事は残る。`StateError` と SQLite の例外も受け止めない。
 
 		`analyze` は `runs` の表と `neta_ledger` に書かない。
+
+		手順6のうち `Story` の組み立て（`id`・`repo_id`・`date` を付ける）は S-02、`save_stories` の呼び出しは S-03 で書く（plan.cue）。
 		"""
 		satisfies: ["R-01", "R-02", "R-03", "F-01"]
 	}
@@ -99,6 +101,7 @@ design: {
 		| V-06 | `neta` が物で、`score` が0〜3の整数（`bool` と小数の値は不可）。`reason` は省けば空の文字列、あれば文字列。`channels` は省けば空、あれば文字列の配列 | `stories[0].neta.score` |
 		| V-07 | `event_ids` が1件以上の文字列の配列で、どれも入力の出来事のID、同じ話題の中で重ならない | `stories[0].event_ids` |
 		| V-08 | 1つの出来事は1つの話題にだけ入る | `stories[1].event_ids` |
+		| V-09 | 話題の中のすべての文字列（`title`・`what`・`why`・`notice`・`waiting`・`neta.reason`・`neta.channels` の各要素）が UTF-8 に符号化できる（`\\ud800` のような対のないサロゲートを含まない。含むと `Store.save_stories` で `UnicodeEncodeError` になり、型の決まった失敗にならないため） | `stories[0].title` |
 
 		知らない鍵は捨てる。V-01・V-02 に当たれば、その後の検査はしない。誤りは最大20件まで集め、それを超えたら「ほかにも誤りがあります」の1件を足して止める。`json.loads` の `RecursionError` も V-01 の誤りにする。
 		"""
@@ -147,6 +150,6 @@ rejected: [
 ]
 
 risks: [
-	"同じ日を分析し直して話題の分け方が変わると、前の話題が `stories` の表に残り、`stories_for` が古い話題も返す。このIssueの後の段（iss-00016）は `analyze` の戻り値を使い、`stories_for` を使わないこと。消し方（日ごとの置き換え）は、`shipcast run` の再実行（iss-00021）か、ネタポイントの帳簿（iss-00019）を作るときに決める（統括への申し送り）",
+	"同じ日を分析し直して話題の分け方が変わると、前の話題が `stories` の表に残り、`stories_for` が古い話題も返す。分け方が同じでも、`save_stories` は同じIDの行を上書きして行の順（rowid）を保つので、`stories_for` の順は前の分析の順のままになる。このIssueの後の段（iss-00016）は `analyze` の戻り値を使い、`stories_for` を使わないこと。消し方（日ごとの置き換え）は、`shipcast run` の再実行（iss-00021）か、ネタポイントの帳簿（iss-00019）を作るときに決める（統括への申し送り）",
 	"出来事の本文（Orcaの会話など）が長いと、分析のモデルへの入力が大きくなる。このIssueでは切り詰めない（分析の経路 codex・claude には入力の上限を設けていない。iss-00014）",
 ]
