@@ -91,6 +91,8 @@ design: {
 
 		`src/shipcast/cli.py` は、`from shipcast.collect import command as collect_command  # isort: skip` の1行（`from shipcast import repo` の行の隣）と、`Command(Entry("collect", "日誌の素材を集める", collect_command.configure), "iss-00011")` への1行の書き換えだけを変える。
 
+		`command.py` は `from shipcast.collect import COLLECTORS` で読み込み、`run` の中でモジュールの名前 `COLLECTORS` を読む（試験が `shipcast.collect.command.COLLECTORS` を架空のcollectorに置き換えられるようにする）。
+
 		`run` の処理と表示（`<day>` は `YYYY-MM-DD`）：
 
 		1. `load_config()`。`ConfigError` なら標準エラーに `shipcast collect: {error}`、終了コード1。
@@ -125,7 +127,7 @@ design: {
 
 		1. `repo.path.is_dir()` でなければ `CollectError(f"{path}: ディレクトリがありません")`。
 		2. `rev-parse --show-toplevel`。終了コードが0でなければ `CollectError(f"{path}: Gitのrepositoryではありません")`。出力のpathを `Path(...).resolve()` にして `repo.path.resolve()` と違えば `CollectError(f"{path}: Gitのrepositoryの最上位ではありません（最上位: {top}）")`（親のrepositoryを読み違えないため）。
-		3. refを確かめる。`repo.ref` が `-` で始まれば、2と同じ形で `CollectError(f"{path}: ref {ref} がありません")`。`rev-parse --verify --quiet --end-of-options <ref>^{commit}` の終了コードが0でなければ同じ誤り。出力のSHA（40桁）を `tip` とし、以後は `tip` だけを読む。
+		3. refを確かめる。`repo.ref` が `-` で始まれば `CollectError(f"{path}: ref {ref} がありません")`。`rev-parse --verify --quiet --end-of-options <ref>^{commit}` の終了コードが0でなければ同じ誤り。出力のSHA（40桁）を `tip` とし、以後は `tip` だけを読む。
 		4. 正本の歴史：`log --first-parent -z --no-show-signature --no-color --format=<FMT> --since=<S> --until=<U> --end-of-options {tip}`。`<S>`・`<U>` は `day_bounds` の両端をUTCに直した `"%Y-%m-%d %H:%M:%S +0000"`。gitの `--since`・`--until` は枝を刈るためだけに使い、各commitの時刻 `committed` を `start <= committed < end` で絞り直す（端の秒の扱いをgitに任せない）。
 		5. 各mergeが取り込んだcommit：4で残った親が2つ以上の `M` ごとに、`log -z --no-show-signature --no-color --format=<FMT> --max-count={max_merged + 1} --end-of-options {M} ^{Mの第1の親}` を読み、`M` 自身を除く。`max_merged` 件を超えたら先頭（新しい方）の `max_merged` 件だけにし、警告 `マージ {M[:12]} が取り込んだcommitが{max_merged}件を超えたので、{max_merged}件だけを集めました` を足す。
 		6. 変更したファイルの数：commit `C` ごとに、親があれば `diff-tree -r -z --no-commit-id --name-only {Cの第1の親} {C}`、親がなければ `diff-tree -r -z --no-commit-id --name-only --root {C}` を読み、NULで区切った空でない項目を数える（mergeは第1の親との違い、つまり正本に入った変更）。
