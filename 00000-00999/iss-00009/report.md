@@ -73,3 +73,8 @@ ID: "iss-00009"
 - POSIX では親ディレクトリをロックし、読み込み後に原文が変わっていた場合は再読み込みしてから追記する。macOS 上で同じ設定に対する2件の同時登録が両方残ることを試験した。非 POSIX 環境の書き込みは D-07 の不可分な置き換えを使用する。
 
 ## Residual Risks / Follow-ups
+
+- PR #25（https://github.com/chemitaro/shipcast/pull/25）で `ci` run 45805700320（pull_request、`9e5a113`）の job `test` が success。`github-pr-checks` の観測は OBSERVED_CI_PASS、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（2026-11-26T10:56:06Z）。外部の CheckRun は観測の範囲外。
+- 後のIssueが設定に項目を足すときは、`shipcast.config` の型と検証の規則に足す（知らない項目は誤りにするため）。
+- 並行登録のロック（fcntl）はPOSIXだけ。ほかの環境では一時ファイルと `os.replace` の不可分な置き換えだけになる。
+- マージと `spec-dock work finish` は統括が行う。
