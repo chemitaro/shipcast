@@ -37,16 +37,6 @@ ID: "iss-00017"
 - レビュアー：Claude `code-reviewer`（Opus 5.5 / medium。strict の既定）を `axis: standards` と `axis: spec` の2人で並行
 - 結果のファイル：shipcast の worktree の `.workbench/code-review/iss-00017-cp1/round-1-{standards,spec}.json` と `.check.json`（`validate-review.py` が両方 exit 0、status pass）。前後の digest は同じ
 
-### 最終品質ゲート（2026-11-26）
-
-- 結果：**合格**（campaign `iss-00017-fqg-2`、attempt 01）
-- 合格のコミット：`55095595130a727352cfed9bf06bd8ad8a720ad9`（範囲 `f68349a..5509559`）。記録のみのコミットはなし（記録は Git の外の report.md・plan.cue）
-- 1人目：Claude `quality-gate-reviewer`（Opus 5.5 / high）。観点 functional-correctness、requirements-closure、test-adequacy、security-baseline、api-contract。P0〜P3 0件、coverage complete
-- 2人目：ChatGPT（GPT-6 / Extra High、`chatgpt-code-review-strict`、モデルと思考の選択は verified）。P0 0件・P1 0件・P2 2件。判定 fail は、Strict の参照範囲が対象ブランチだけで仕様の正本（`spec-dock/canonical`）を読めなかった証拠の不足によるもので、実装の欠陥の判定ではない（2人目の判定はゲートの条件ではない）
-- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（294 passed）、`uv run shipcast serve --help` がすべて exit 0
-- 記録：shipcast の worktree の `.workbench/final-quality-gate/iss-00017-fqg-2/closure.md`、応答は同じ場所の `review-response.md`
-- P2（情報）：`find_design_system` が外を指す symlink の候補を受けて後の正常な候補を選ばない（安全側）。閉じないコードの囲みで終わる日誌で末尾のコメントが見える（既知）
-
 ## Outcome
 
 - S-01 `d7146d9`（impl-ui：タスク担当 Opus 5.5 / high、同じセッション）：`shipcast.page` の `wrap_markdown`（`</script` の ASCII の大小を問わない置き換えと、末尾の `\n<!-- -->\n`）、`notice_page`・`NOT_FOUND_PAGE`・`BROKEN_JOURNAL_PAGE`、架空の見本の日誌、dev の `html5lib`。
@@ -95,4 +85,3 @@ S-04 の後の `test_commands`：`uv sync --locked` 0、`uv run ruff check` 0、
 - iss-00018 への申し送り：一覧 `/<repo>/` を足すとき、`split_path` に末尾の `/` の扱いを足す（今は `None`）。
 - 統括への申し送り：親 epic-00005 の F-03・D-01・D-05 が `<!--` を `<\!--` に置き換える案のまま。子の decisions と試作の証拠に合わせて親を直すかの判断。
 - ChatGPT の仕様レビューの2人目は取得できなかった（60分応答なし）。
-- `find_design_system` は、置き場の外を指す symlink の `ds.js`/`ds.css` を候補として受ける（最終品質ゲートの ChatGPT P2）。配信は外のファイルを返さないが、ページは描けない。
