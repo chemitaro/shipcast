@@ -40,7 +40,7 @@ ID: "iss-00011"
 
 - 開始のコミットの基準：165 passed。合格のコミットで `test_commands` すべて0（191 passed）。
 - `spec-dock scope check iss-00011`：誤り0・警告0。
-- CI：PRの作成後に記録する。
+- CI：PR #26（https://github.com/chemitaro/shipcast/pull/26）で GitHub Actions `ci` が `e6c7e89` に対して success。observer の exit 0、observable_ci PASS、merge_readiness READY（2026-11-26T11:27:00Z）。
 
 ## 逸脱と判断
 

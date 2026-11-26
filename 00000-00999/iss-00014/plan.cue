@@ -18,8 +18,8 @@ steps: {
 	}
 	"S-03": {
 		title:    "経路の部品と共通の入口（`get_route`・`GuardedRoute`・4つの経路・runner・例外）"
-		text:     "D-03〜D-06。T-01、T-03、T-04 の経路の試験、T-05、T-06、T-08 を `tests/test_models.py` に先に書いて Red、`src/shipcast/models.py` に `ROUTES`・`DEFAULT_TIMEOUT`・`JSON_INSTRUCTION`・`MAX_ARGV_PROMPT_BYTES`・例外4つ・`Completed`・`Runner`・`run_subprocess`・非公開の経路4つ・`GuardedRoute`・`get_route` を書いて Green。試験は偽の runner だけを使い、`subprocess.run` を落とす autouse の fixture を置く（D-06）。本物の `codex`・`claude`・`agy` を起動しない（`--help` も呼ばない）。完了の条件：`test_commands` がすべて終了コード0。この手順の後で区切りのレビュー（CP-1）。"
-		realizes: ["R-01", "R-02", "F-01", "F-02", "F-03", "F-04"]
+		text:     "D-03〜D-06。T-01、T-03、T-04 の経路の試験、T-05、T-06、T-08、T-09、T-10 を `tests/test_models.py` に先に書いて Red、`src/shipcast/models.py` に `ROUTES`・`DEFAULT_TIMEOUT`・`JSON_INSTRUCTION`・`MAX_ARGV_PROMPT_BYTES`・例外4つ・`Completed`・`Runner`・`run_subprocess`・非公開の経路4つ・`GuardedRoute`・`get_route` を書いて Green。試験は偽の runner だけを使い、`subprocess.run` を落とす autouse の fixture を置く（D-06）。本物の `codex`・`claude`・`agy` を起動しない（`--help` も呼ばない）。完了の条件：`test_commands` がすべて終了コード0。この手順の後で区切りのレビュー（CP-1）。"
+		realizes: ["R-01", "R-02", "F-01", "F-02", "F-03", "F-04", "F-05"]
 		after:    ["S-02"]
 		session:  "impl"
 	}
@@ -33,19 +33,21 @@ steps: {
 }
 
 tests: {
-	"T-01": {title: "`get_route` が4つの経路の `GuardedRoute`（`name`・`model` が設定の値）を返す。`gemini` で4つの名前を示す `UnknownRoute`、runner は呼ばれない。`timeout` が0・負・`inf`・`nan` で `ValueError`、`responder` を `fake` 以外に渡すと `ValueError`。`fake` は同じ入力で同じJSONの文字列を返し、その中の値が受け取った model・prompt・system・want_json で、`responder` を渡せばその戻り値を返す。`codex`・`claude`・`antigravity` は D-03 の表の argv・標準入力・cwd（空のディレクトリ）で runner を1回呼び、表の取り出し方の本文を返す（codex は偽の runner が `--output-last-message` のファイルに書いた中身、antigravity はJSONの `response`、thinking が `high` なら `--model gemini-4-neon-high`）。`want_json` で system の末尾に `JSON_INSTRUCTION` が付く。既定の timeout 600 が runner に渡る", verifies: ["R-01"]}
-	"T-02": {title: "RD-01〜RD-11 の各規則で、ダミーの値が `[伏せた]` になり、前後の文は残る（RD-01 は閉じのない塊も末尾まで、RD-02 は `https://user:pass@host` の利用者:パスワードだけ、RD-04 は `export DB_PASSWORD=\"x\"`・`api_token: x`・JSONの `\"secret\": \"x\"`・小文字の鍵、値の空の `TOKEN=` は変わらない）。秘密を含まない日本語の文とコードは変わらない。`redact(redact(x)) == redact(x)`。`str` でない入力は `TypeError`", verifies: ["R-02", "F-03"]}
+	"T-01": {title: "`get_route` が4つの経路の `GuardedRoute`（`name`・`model` が設定の値）を返す。`gemini` で4つの名前を示す `UnknownRoute`、runner は呼ばれない。`timeout` が0・負・`inf`・`nan` で `ValueError`、`responder` を `fake` 以外に渡すと `ValueError`。`fake` は同じ入力で同じJSONの文字列を返し、その中の値が受け取った model・prompt・system・want_json で、`responder` を渡せばその戻り値を返す。`codex`・`claude`・`antigravity` は D-03 の表の argv・標準入力・cwd（一時ディレクトリの中の空の `work/`）で runner を1回呼び、表の取り出し方の本文を返す（codex は偽の runner が `--output-last-message` のファイルに書いた中身、antigravity はJSONの `response`、thinking が `high` なら `--model gemini-4-neon-high`、effort がなければ `-c model_reasoning_effort` と `--effort` を付けない）。`want_json` で system の末尾に `JSON_INSTRUCTION` が付く。既定の timeout 600 が runner に渡り、runner の env が `complete` の環境の写しと等しい", verifies: ["R-01"]}
+	"T-02": {title: "RD-01〜RD-11 の各規則で、ダミーの値が `[伏せた]` になり、前後の文は残る。RD-01：同じ種類の END まで、種類の違う END（BEGIN PRIVATE KEY の後の END RSA PRIVATE KEY）では止まらず末尾まで、END のない塊も末尾まで。RD-02：`https://user:pass@host` の利用者:パスワードだけ。RD-04：`export DB_PASSWORD=\"x\"`・`api_token: x`・`password: correct horse battery`・小文字の鍵、1行のJSON `{\"api_token\": \"…\", \"title\": \"keep\"}` で `title` が残る、JSONの文字列の中のJSON（`json.dumps` を2重にした `\\\"password\\\": \\\"…\\\"`）の値が伏せられ後ろの鍵と出来事が残る、値の空の `TOKEN=` と空白だけの値は変わらない。RD-05〜RD-11：日本語の文字のすぐ前と後ろにあるトークンも伏せる、ペイロードが `e30` の短いJWTも伏せる、`risk-assessment-framework` は変わらない。秘密を含まない日本語の文とコードは変わらない。全部の例で `redact(redact(x)) == redact(x)`。`str` でない入力は `TypeError`", verifies: ["R-02", "F-03"]}
 	"T-03": {title: "4つの経路（`fake` は `responder` で受け取ったもの）で、prompt と system に入れたダミーの秘密が、経路の実装に届く文字列（runner の argv と標準入力、`responder` の引数）に含まれず、`[伏せた]` が含まれる", verifies: ["R-02"]}
-	"T-04": {title: "`CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_THREAD_ID` のどれか1つ（値が空でも）があると、`agent_markers` がその名前を返し、antigravity の `complete` が `RouteRefused`（`markers` に名前、文に値を含まない）で止まり、runner は呼ばれない。印のない env では止まらない。Mapping でない env と、鍵を読むと例外を上げる env で `in_agent_context` が真。ほかの3つの経路は印があっても止まらない。`get_route` は印があっても止まらない。`run_subprocess([\"agy\", ...])` は本物の `os.environ` に印があれば（monkeypatch で置く）`subprocess.run` を呼ばずに `RouteRefused`", verifies: ["F-01"]}
-	"T-05": {title: "偽の runner で、終了コード1、`subprocess.TimeoutExpired`、`FileNotFoundError`、空白だけの標準出力、codex の出力のファイルがない、antigravity の標準出力がJSONでない・`status` が `ERROR`・`response` が空、`responder` が `None` を返す、のどれも `RouteFailed` になり、`route`・`returncode`・`timed_out`・`reason` が場合に合い、`stderr_tail` が末尾の2000文字以内でダミーの秘密を含まない", verifies: ["F-02"]}
-	"T-06": {title: "`shipcast.models.redact` を例外を上げる関数に差し替えると、`complete` がその例外をそのまま上げ（`RouteFailed` に包まない）、runner と `responder` が呼ばれない。prompt か system が `str` でなければ `TypeError` で、runner が呼ばれない", verifies: ["F-03"]}
+	"T-04": {title: "`CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_THREAD_ID` のどれか1つ（値が空でも）があると、`agent_markers` がその名前を返し、antigravity の `complete` が `RouteRefused`（`markers` に名前、文に値を含まない）で止まり、runner は呼ばれない。印のない env では止まらない。Mapping でない env と、鍵を読むと例外を上げる env と、鍵は列挙できるが値を読むと例外を上げる Mapping で、`agent_markers` が `(UNREADABLE_ENV,)` を返し、antigravity の `complete` が `RouteRefused`、ほかの経路の `complete` が `RouteFailed` で、どちらも runner は呼ばれない。同じ `GuardedRoute` で、1回目は印がなく runner が呼ばれ、env に印を足した2回目は `RouteRefused` で runner が呼ばれない。ほかの3つの経路は印があっても止まらない。`get_route` は印があっても止まらない。`run_subprocess([\"agy\", ...])` は本物の `os.environ` に印があれば（monkeypatch で置く）`subprocess.run` を呼ばずに `RouteRefused`", verifies: ["F-01"]}
+	"T-05": {title: "偽の runner で、終了コード1、`subprocess.TimeoutExpired`、`FileNotFoundError`、`ValueError`（NULを含む引数を想定）、空白だけの標準出力、codex の出力のファイルがない・UTF-8でない、antigravity の標準出力がJSONでない・JSONの配列や文字列（dict でない）・`status` が `ERROR`・`status` がない・`response` が空・`response` が数、`responder` が `None` を返す、のどれも `RouteFailed` になり、`route`・`returncode`・`timed_out`・`reason` が場合に合う。標準エラーの先頭に `PASSWORD=` と長い値（2000文字を超える）、途中にダミーのトークンがあるとき、`stderr_tail` が2000文字以内で、ダミーの秘密の値の断片を含まない", verifies: ["F-02"]}
+	"T-06": {title: "`shipcast.models.redact` を例外を上げる関数に差し替えると、`complete` がその例外をそのまま上げ（`RouteFailed` に包まない）、runner と `responder` が呼ばれない。prompt の伏せは通り system の伏せで例外を上げる場合も同じ。prompt か system が `str` でなければ `TypeError` で、runner が呼ばれない", verifies: ["F-03"]}
 	"T-07": {title: "`DEFAULT_CONFIG_TEXT` の `[models.analyst]` の `model` の行（かその直前の注記の行）に `gpt-6-luna` と `codex debug models` があり、`parse_config(DEFAULT_CONFIG_TEXT, ...)` の `models.analyst` が `ModelConfig(\"codex\", \"gpt-6.2-sol\", \"low\", None)` のまま", verifies: ["R-03"]}
-	"T-08": {title: "antigravity で、伏せた後の `text` が 200,000 バイトを超えると runner を呼ばずに `RouteFailed`（理由に長さ）、ちょうど 200,000 バイトなら runner が呼ばれる。ほかの経路には上限がない", verifies: ["F-04"]}
+	"T-08": {title: "antigravity で、最終の `text`（system と `JSON_INSTRUCTION` と区切りと prompt、日本語の多バイト文字を含む）の UTF-8 のバイト数が 200,000 を1バイト超えると runner を呼ばずに `RouteFailed`（理由に長さ）、ちょうど 200,000 バイトなら runner が呼ばれる（system あり・want_json ありの組で確かめる）。ほかの経路には上限がない", verifies: ["F-04"]}
+	"T-09": {title: "`run_subprocess` を、`shipcast.models.subprocess.run` を記録する偽物に差し替えて呼ぶと、`stdin=None` では `stdin=subprocess.DEVNULL` で `input` を渡さず、`stdin` が文字列では `input` にその文字列を渡し、どちらも `capture_output=True`・`text=True`・`encoding=\"utf-8\"`・`errors=\"replace\"`・渡した `cwd`・`env` と等しい dict・渡した `timeout`・`check=False` で呼ぶ。戻り値の `CompletedProcess` が `Completed` になる。偽物が `TimeoutExpired` を上げればそのまま上がる", verifies: ["R-01", "F-02"]}
+	"T-10": {title: "道具を止める・狭める引数（F-05）：codex の argv に `--disable shell_tool`・`--disable unified_exec`・`--disable view_image`・`--disable plugins`・`--sandbox read-only`・`--ignore-user-config` があり、claude の argv の最後が `--tools` と空の文字列、antigravity の argv に `--mode plan`・`--sandbox` があって `--dangerously-skip-permissions` がない。3つとも cwd が空のディレクトリ", verifies: ["F-05"]}
 }
 
 verification: "`test_commands` を順に流し、すべて終了コード0。試験は偽の runner と `fake` の経路だけで、外部のモデルと本物の `agy` を呼ばない。PRを作った後に、GitHub ActionsのCIの合格を `github-pr-checks` で観測する。本物の経路（codex と antigravity）での確かめは、本人の手動の実行だけ。"
 rollback:     "PRを戻す（revert）だけで元に戻る。新しいモジュールを呼ぶ側はまだない（iss-00015・iss-00016 が後で使う）。設定の見本の変更は注記の1行だけ。"
-exit:         "PRが最終品質ゲートとCIに合格し、タスク担当が統括にPR・合格のコミット・CIの結果・closure.md を報告した時点で、このIssueの作業は終わる。マージは本人（統括が本人に確かめて采配する）、`spec-dock work finish` は統括が行う。"
+exit:         "PRが最終品質ゲートとCIに合格し、タスク担当が統括にPR・合格のコミット・CIの結果・closure.md を報告した時点で、このIssueの作業は終わる。マージは統括が本人に確かめてから行い（gates の merger）、`spec-dock work finish` も統括が行う。"
 
 // 関門（coding-task）。保証レベル strict の既定（specify の references/assurance-levels.md）に従う。
 gates: {
@@ -66,7 +68,7 @@ gates: {
 		second_opinion: "chatgpt（ChatGPT GPT-6 / Extra High。取れないときは GPT-6.2 Astra / high）"
 	}
 	merge:  "owner"
-	merger: "本人。統括（Antigravity）が本人に確かめてマージを采配する。タスク担当と実装担当はマージしない（本人の決定 21、strict は agent のマージを許さない）"
+	merger: "統括（Antigravity）が、本人に確かめてからマージする。AGENTS.md と本人の決定 21 は「統括がマージする」と定め、strict では `coding-task` のマージの規則が本人の確認なしのマージを許さないので、統括は本人の了承を得てからマージする（`merge: owner` は、この本人の確認を指す）。タスク担当と実装担当はマージしない"
 	pr:     "branchは `chemitaro/iss-00014`（統括が作ったworktreeのbranch）。PRの本文に、合格のコミット、最終品質ゲートの結果、CIの結果を書く。Issueを自動で閉じる書き方（Closes #14）は使わず、`Refs #14` にする"
 }
 

@@ -95,7 +95,7 @@ design: {
 
 		- 引数の確かめ（2026-11-26）：`codex`（codex-cli 0.172.0）と `claude` は `--help` で確かめた。`codex` の4つの `--disable` は、モデルを呼ばない `codex debug prompt-input` で、手元を読む道具（`exec_command`・`write_stdin`・`view_image`・プラグインの導入）がモデルに見える道具の一覧から消えることを確かめた（requirement.cue の decisions）。`agy`（1.5.12）は起動せず、公式の文書で確かめた（`-p` は print、応答は標準出力、`json` の形は `{conversation_id, status, response, error?, duration_seconds, num_turns, usage}`、`status` は `SUCCESS`・`ERROR` など、モデルの名前に深さが入る `gemini-4-neon-high` など、`--mode` は `accept-edits`・`auto`・`plan`、許可を取れない道具は拒まれて続く、`--sandbox` はコマンドを隔離しネットワークを止める）。文書は、ふつうの標準入力からプロンプトを読む方法を示さないので、プロンプトは `-p` の引数で渡す（F-04）。
 		- `codex` は thinking を使わず、`claude` と `codex` は model と effort だけを使う。`antigravity` は effort を使わない。
-		- 道具（F-05）：`claude` は `--tools ""` で道具なし。`codex` は手元を読む道具を外し、利用者の設定（MCP・フック）を読まず、read-only の sandbox、空の cwd。`antigravity` は `plan` のモード、`--sandbox`、空の cwd で狭めるだけ（requirement.cue の Q-01）。
+		- 道具（F-05）：`claude` は `--tools ""` で道具なし。`codex` は手元を読む道具を外し、利用者の設定（MCP・フック）を読まず、read-only の sandbox、空の cwd。`antigravity` は `plan` のモード、`--sandbox`、空の cwd で狭めるだけで、残る危険は受け入れて記録する（requirement.cue の decisions の Q-01）。
 		- 子の環境は、`complete` が作った環境の写し（D-04）。認証のため `HOME` などが要るので、絞らない。
 		"""
 		satisfies: ["R-01", "F-04", "F-05"]
@@ -179,7 +179,7 @@ design: {
 risks: [
 	"エージェントの印の環境変数は、各道具の版で変わりうる。Antigravity の CLI が自分の道具の中で付ける印は文書になく、Orca の外で Antigravity の作業者が shipcast を動かすと止められない。2026-12-19 の Antigravity の規約の読み直しのときに、印も見直す（requirement.cue の questions）",
 	"伏せる規則に当てはまらない形の秘密（独自の形のトークン、鍵の名前のない値、引用のない値の中の `, \"` の後ろ）は伏せられない。規則は `RULES` の表に1行足して増やす",
-	"`agy -p` の道具は、引数では止めきれない（F-05、requirement.cue の Q-01）。`codex` の道具の外し方は、codex-cli の版で機能の名前が変わりうる。版を上げたら `codex debug prompt-input` で確かめ直す",
+	"`agy -p` の道具は、引数では止めきれない（F-05。requirement.cue の decisions の Q-01 で受け入れた。本人がマージの前に確かめる）。`codex` の道具の外し方は、codex-cli の版で機能の名前が変わりうる。版を上げたら `codex debug prompt-input` で確かめ直す",
 	"`agy` の引数は文書だけで確かめ、起動していない。最初の本物の実行（本人の手動）で、引数の誤りが `RouteFailed` として見つかりうる。その場合は D-03 の表を直す",
 	"antigravity の経路は、プロンプトを命令の行の引数で渡すので、同じPCのほかの利用者から `ps` で見える（伏せた後の文字列）。個人のPCの前提で受け入れる",
 ]
