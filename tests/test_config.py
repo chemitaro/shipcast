@@ -185,6 +185,22 @@ def test_missing_file_and_default_config_text(tmp_path):
     assert parse_config(DEFAULT_CONFIG_TEXT, path) == parse_config("", path)
 
 
+def test_default_analyst_model_documents_cheaper_option(tmp_path):
+    from shipcast.config import DEFAULT_CONFIG_TEXT, ModelConfig, parse_config
+
+    _, _, remainder = DEFAULT_CONFIG_TEXT.partition("[models.analyst]\n")
+    analyst, _, _ = remainder.partition("\n[")
+    lines = analyst.splitlines()
+    model_index = next(i for i, line in enumerate(lines) if line.startswith("model ="))
+    note_lines = [lines[model_index]]
+    if model_index and lines[model_index - 1].lstrip().startswith("#"):
+        note_lines.append(lines[model_index - 1])
+    assert any("gpt-6-luna" in line and "codex debug models" in line for line in note_lines)
+
+    config = parse_config(DEFAULT_CONFIG_TEXT, tmp_path / "config.toml")
+    assert config.models.analyst == ModelConfig("codex", "gpt-6.2-sol", "low", None)
+
+
 def test_invalid_utf8_has_a_fix(tmp_path):
     from shipcast.config import ConfigError, load_config
 
