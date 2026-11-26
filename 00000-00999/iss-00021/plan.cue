@@ -19,7 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
-		status:   "doing"
+		status:   "done"
 		title:    "再実行の確かめ"
 		text:     "D-05。T-08 を書く。既存の部品の性質で満たすので、Red にならないことがある。そのときは、試験が満たすべき性質を本当に見ていることを、一時的に `Store.add_events` を `INSERT` だけにする等の手元の変更で落ちることを確かめて戻し、報告に書く（その変更はcommitしない）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-03"]

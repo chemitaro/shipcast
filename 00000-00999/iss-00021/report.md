@@ -28,14 +28,21 @@ ID: "iss-00021"
 
 - S-01 `bca2662`。前日・指定日と対象 repository の選択を CLI に接続し、収集・日誌作成・repository ごとの実行記録をつないだ。入口と各 repository の失敗を扱い、処理中の一件の失敗で残りを止めない。
 - S-02 `834c57d`。状態の置き場をロックしてから処理を始める。収集前に読み取り権限を確かめ、TCC の印があれば案内を記録する。
+- S-03 `f8182d7`。同日の再実行で出来事と日誌の行は増えず、日誌は再実行時刻で置き換わり、実行履歴だけが積み上がることを試験にした。
 
 ## Verification
 
 - 基準 `ef3075fdcdaba36311df209b8fb44b7aff2df65a`。 `uv sync --locked` → `uv run ruff check` → `uv run pytest -q` はすべて終了コード 0、792 件合格。
 - S-01 `bca2662`。 `uv run pytest -q tests/test_run.py` の対象を絞って実行し、T-01 は前日計算の未実装で 4 件失敗 → 4 件合格、T-02 は未接続の CLI で 3 件失敗 → 3 件合格、T-03 は失敗処理の欠落で 4 件失敗 → 4 件合格、T-04 は入口の失敗処理の欠落で 6 件失敗 → 6 件合格（Red は終了コード 1、Green は 0）。基準と同じ 3 コマンドは順にすべて終了コード 0、全 808 件合格。
 - S-02 `834c57d`。 `uv run pytest -q tests/test_run.py -k "locked_state or releases_lock"` はロックなしで 3 件失敗 → 3 件合格。`-k tcc_hint` は案内・読み取り確認の欠落で 6 件失敗・1 件合格、経路の初期化失敗を確認した `-k setup_failure` は 1 件失敗・1 件合格 → 両者を合わせた `-k "tcc_hint or setup_failure"` で 9 件合格。基準と同じ 3 コマンドは順にすべて終了コード 0、全 819 件合格。
+- S-03 `f8182d7`。 `uv run pytest -q tests/test_run.py -k rerunning_same_day` は既存の重複防止で最初から 1 件合格。 `uv run python -` で 2 回目の CLI 実行時だけ、同じプロセス内で `Store.add_events` の SQL を `INSERT OR IGNORE` から `INSERT` に差し替え、pytest を起動すると `UNIQUE constraint failed: events.id` で 1 件失敗（終了コード 1）。差し替えは試験プロセス内に限定し、既存 module のファイルへの変更はない。基準と同じ 3 コマンドを通常どおり再実行し、順にすべて終了コード 0、全 820 件合格。
+- ログは `.workbench/implement/iss-00021/` に保存した。実行するモデル経路は `fake` のみ。
 
 ## Residual Risks / Follow-ups
+
+- 外付けボリュームでの macOS の TCC と実モデルでの動作は、本人が手動で確認する。 `os.scandir` が通り Git だけが拒まれた場合、案内は collector のエラー文に印がある場合に限られる。
+- iss-00019 と本 Issue の統合後に、`journal_extensions_for` を台帳へつなぐ。
+- 最終品質ゲートと PR はタスク担当に引き継ぐ。
 
 ## 逸脱と判断
 
