@@ -71,6 +71,8 @@ ID: "iss-00018"
 - 画面の写し：`.workbench/coding-task/iss-00018/browser/cover-390.png`、`list-390.png`
 - CSPの違反：Orca の CLI にコンソールの読み取りがないため直接は見ていない。敵対的な値から要素が作られないことで、違反の元がないことを確かめた
 
+- PR #32（https://github.com/chemitaro/shipcast/pull/32）で `ci` run 45832411680（pull_request、`bf9af47`）が success。`github-pr-checks` の観測は coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（MERGEABLE、CLEAN、2026-11-26T13:47:21Z）。外部の CheckRun は観測の範囲外。マージと `spec-dock work finish` は統括が行う。
+
 ## Residual Risks / Follow-ups
 
 - 日を1つも持たない repository のディレクトリも、表紙の「repositoryごとの一覧」にリンクが出て、押すと404（仕様レビューの P3）。
