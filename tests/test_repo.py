@@ -323,3 +323,77 @@ def test_concurrent_adds_keep_both_entries(config_file, make_repo, monkeypatch):
             assert second_result.result().repo.id == "second"
 
     assert {repo.id for repo in load_config().repos} == {"first", "second"}
+
+
+def test_list_prints_repos_in_registration_order(config_file, make_repo, capsys):
+    third = make_repo("third")
+    first = make_repo("first")
+    second = make_repo("second")
+    special = make_repo("special")
+    for path in (third, first, second):
+        assert main(["repo", "add", str(path)]) == 0
+    assert (
+        main(
+            [
+                "repo",
+                "add",
+                str(special),
+                "--title",
+                "題名\\例\t次\n行\r終",
+                "--ref",
+                "next",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+    original = config_file.read_bytes()
+
+    assert main(["repo", "list"]) == 0
+    output = capsys.readouterr()
+    assert output.out == (
+        f"third\tthird\t{third}\tmain\n"
+        f"first\tfirst\t{first}\tmain\n"
+        f"second\tsecond\t{second}\tmain\n"
+        f"special\t題名\\\\例\\t次\\n行\\r終\t{special}\tnext\n"
+    )
+    assert output.err == ""
+    assert config_file.read_bytes() == original
+
+
+def test_list_empty_config_suggests_add(config_file, capsys):
+    config_file.parent.mkdir()
+    config_file.write_bytes(b"schema = 1\n")
+
+    assert main(["repo", "list"]) == 0
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err == (
+        "登録されたrepositoryはありません。`shipcast repo add <path>` で登録できます\n"
+    )
+
+
+@pytest.mark.parametrize(
+    ("original", "message"),
+    [
+        (None, "設定ファイルがありません"),
+        (b"timezone = @\n", "TOMLの文法の誤り"),
+        (b"schema = 2\n", "schema:"),
+    ],
+)
+def test_list_missing_or_broken_config_returns_error(config_file, capsys, original, message):
+    if original is not None:
+        config_file.parent.mkdir()
+        config_file.write_bytes(original)
+
+    assert main(["repo", "list"]) == 1
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert output.err.startswith("shipcast repo list:")
+    assert message in output.err
+    assert "直し方:" in output.err
+    if original is None:
+        assert not config_file.parent.exists()
+    else:
+        assert list(config_file.parent.iterdir()) == [config_file]
+        assert config_file.read_bytes() == original

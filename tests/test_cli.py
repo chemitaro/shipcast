@@ -66,7 +66,6 @@ def test_module_help_matches_cli_help(capsys):
 @pytest.mark.parametrize(
     ("command", "issue_id"),
     [
-        ("repo list", "iss-00009"),
         ("collect", "iss-00011"),
         ("write", "iss-00016"),
         ("run", "iss-00021"),

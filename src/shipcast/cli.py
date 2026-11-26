@@ -29,7 +29,7 @@ COMMANDS = (
         "iss-00009",
         (
             Entry("add", "リポジトリを登録する", repo.configure_add),
-            Entry("list", "登録済みのリポジトリを表示する"),
+            Entry("list", "登録済みのリポジトリを表示する", repo.configure_list),
         ),
     ),
     Command(Entry("collect", "日誌の素材を集める"), "iss-00011"),
