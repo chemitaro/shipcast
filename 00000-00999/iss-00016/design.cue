@@ -51,7 +51,7 @@ design: {
 
 		返すのは（形に合った `Draft`、誤りの一覧）。誤りが1件でもあれば `Draft` は `None`。誤りの文は「場所: どう直すか」の形で、応答の値を写さない。知らない鍵は捨てる。
 
-		「生のHTML」は、`<` の直後に英字・`/`・`!`・`?` が続く並び（正規表現 `<[A-Za-z/!?]`）とする。
+		「生のHTML」は、`<` の直後に英字・`/`・`!`・`?` が続く並び（正規表現 `<[A-Za-z/!?]`）とする。「ブロックの印を除いた行頭」は、行頭から、空白・引用の `>`・箇条書きの印（`-`・`*`・`+` と後ろの空白、`数字.`・`数字)` と後ろの空白）の並びを繰り返し除いた残り（marked はリストと引用の中身もブロックとして読み直すため。正規表現 `^(?:\\s|>|[-*+](?:\\s|$)|\\d+[.)](?:\\s|$))*`）。
 
 		| # | 条件 | 誤りの場所 |
 		|---|---|---|
@@ -59,7 +59,7 @@ design: {
 		| W-02 | 全体が物 | `応答` |
 		| W-03 | `lead` が文字列で、前後の空白を除いて空でなく、改行（`\\n`・`\\r`）を含まず、200文字以内で、`<`・`>` を含まない | `lead` |
 		| W-04 | `summary` が1〜5件の文字列の配列で、各要素が前後の空白を除いて空でなく、改行を含まず、生のHTMLを含まず、`:::` で始まらない | `summary`・`summary[0]` |
-		| W-05 | `story` が文字列で、前後の空白を除いて空でなく、どの行も（行頭の空白を除いて）`:::` で始まらず、`# ` か `## ` で始まらず（`###` 以下の見出しはよい）、全体に生のHTMLを含まない | `story` |
+		| W-05 | `story` が文字列で、前後の空白を除いて空でなく、全体に生のHTMLと `:::` を含まず、どの行も「ブロックの印を除いた行頭」（下の注）が `#` 1〜2個の見出し（`#` か `##` の後が空白か行の終わり）・コードの囲み（```` ``` ```` か `~~~`）で始まらず、`=` だけ・`-` だけ（前後の空白は除く）の行でない（setext の見出しを防ぐ。`###` 以下の見出しはよい） | `story` |
 		| W-06 | 上のすべての文字列が UTF-8 に符号化できる（対のないサロゲートを含まない） | `lead`・`summary[0]`・`story` |
 
 		W-01・W-02 に当たれば、その後の検査はしない。W-03〜W-06 は、それぞれの項目に当たる誤りをすべて集める。
@@ -133,7 +133,7 @@ design: {
 		    analyst: str | None,       # "<経路>/<モデル>"。出来事のない日は None
 		    writer: str | None,
 		    generated_at: datetime,    # 時間帯つき
-		    extensions: Sequence[JournalExtension] = EXTENSIONS,
+		    extensions: Sequence[JournalExtension] | None = None,   # None なら呼んだ時点の EXTENSIONS
 		) -> str: ...
 		```
 
@@ -166,7 +166,8 @@ design: {
 		```
 
 		- `:::warning` は notice が1件もなければ、`:::checklist` は waiting が1件もなければ、塊ごと書かない。
-		- `- ` の後ろに入れる文字列（要約の行、notice、waiting）は `_inline` を通す：空白の並び（改行を含む）を1つの空白にし、前後の空白を除き、`&` → `&amp;`、`<` → `&lt;`、`>` → `&gt;` に置き換える（F-02。marked は生のHTMLを通すため）。`_inline` の後に空になった項目は書かない。
+		- `- ` の後ろに入れる文字列（要約の行、notice、waiting）は `_inline` を通す：(1) 空白の並び（改行を含む）を1つの空白にし、前後の空白を除く。(2) `&` → `&amp;`、`<` → `&lt;`、`>` → `&gt;` に置き換える（F-02。marked は生のHTMLを通すため）。(3) 先頭の文字が `#`・`:`・`-`・`*`・`+`・`=`・`` ` ``・`~`・`|` のどれかなら、その前に `\\` を1つ足す。先頭が `数字.` か `数字)` なら、`.`・`)` の前に `\\` を足す（箇条書きの中でブロックとして読み直されても、囲み・見出し・入れ子の箇条書き・コードにならないように）。`_inline` の後に空になった項目は書かない。
+		- `:::warning`・`:::checklist` を省くかどうかは、`_inline` の後に残った項目の数で決める（全部が空になれば塊ごと書かない）。
 		- `draft.story` はそのまま入れる（D-01 の W-05 で検査済み）。
 		- 拡張点：`extensions` の順に `render(repo_id, day, stories, events)` を呼ぶ（D-05）。
 
@@ -186,7 +187,7 @@ design: {
 		EXTENSIONS: tuple[JournalExtension, ...] = ()   # iss-00019 が「発信の芽」をここに足す
 		```
 
-		`build_entry` は、出来事のある日に、`:::metrics` の塊の後で、各部品の `render` を順に呼ぶ。戻り値が `None` か空白だけの文字列なら足さない。そうでなければ前後の空白・改行を除いた文字列を、空行1つを挟んで足す。中身の検査はしない（部品の責任。部品は生のHTMLを入れないこと）。`render` の例外は受け止めず、そのまま投げる（日誌は書かれない）。
+		`extensions` が `None` のときは、呼んだ時点の `shipcast.write.EXTENSIONS` を読む（関数の既定値に固めない。iss-00019 の登録と試験の差し替えが効くように）。`build_entry` は、出来事のある日に、`:::metrics` の塊の後で、各部品の `render` を順に呼ぶ。戻り値が `None` か空白だけの文字列なら足さない。そうでなければ前後の空白・改行を除いた文字列を、空行1つを挟んで足す。中身の検査はしない（部品の責任。部品は生のHTMLを入れないこと）。`render` の例外は受け止めず、そのまま投げる（日誌は書かれない）。
 		"""
 		satisfies: ["R-05"]
 	}
@@ -224,7 +225,7 @@ design: {
 		    analyst: _Completer,
 		    writer: _Completer,
 		    now: datetime,
-		    extensions: Sequence[JournalExtension] = EXTENSIONS,
+		    extensions: Sequence[JournalExtension] | None = None,   # None なら呼んだ時点の EXTENSIONS
 		) -> WriteResult: ...
 		```
 
@@ -240,7 +241,7 @@ design: {
 
 		1. `collect_repo(store, repo, day, tz=tz, collectors=COLLECTORS)`。警告は `shipcast write: 警告: <id>: <文>` で出す。誤りが1件でもあれば `shipcast write: 失敗: <id>: <文>` を誤りごとに出し、さらに `shipcast write: 失敗: <id>: 収集に失敗したため、日誌を書きませんでした` を出して、この repositoryを飛ばす（終了コード1）。
 		2. `write_day(store, repo.id, day, tz=tz, journal_dir=config.journal_dir, analyst=…, writer=…, now=datetime.now(tz))`。
-		3. 成功なら標準出力に `<id> <日付>: 日誌を書きました（出来事 <n>件、話題 <m>件）: <path>`。`AnalyzeFailed`・`WriteFailed`・`RouteError`・`JournalFormatError`・`OSError`・`StateError` なら `shipcast write: 失敗: <id>: <例外の文>`（終了コード1）で、次の repositoryへ進む。
+		3. 成功なら標準出力に `<id> <日付>: 日誌を書きました（出来事 <n>件、話題 <m>件）: <path>`。`write_day` が `Exception` の子のどれか（`AnalyzeFailed`・`WriteFailed`・`RouteError`・`JournalFormatError`・`OSError`・`StateError`・`UnicodeError`・拡張点の任意の例外を含む）を投げたら、`shipcast write: 失敗: <id>: <例外の文>`（`AnalyzeFailed`・`WriteFailed`・`RouteError`・`JournalFormatError`・`OSError`・`StateError` 以外は `<例外の型の名前>: <例外の文>`）を標準エラーに出して終了コード1にし、次の repositoryへ進む。`KeyboardInterrupt` などの `BaseException` だけの子は受け止めない。
 
 		試験は `shipcast.write` の名前 `COLLECTORS`・`get_route`・`datetime` を差し替えて、外部を呼ばない。
 		"""

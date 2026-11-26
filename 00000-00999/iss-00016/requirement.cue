@@ -16,7 +16,7 @@ background: """
 
 - `shipcast.model`：`Event`・`Story`・`Entry`、`journal_path(journal_dir, repo, day)`、`JournalMeta`・`write_frontmatter(meta)`・`parse_journal(text)`（iss-00010）
 - `shipcast.state.Store`：`events_for(repo_id, day, *, tz)`、`save_entry(entry)`（iss-00010）
-- `shipcast.collect`：`COLLECTORS` と `collect_repo(store, repo, day, *, tz, collectors)`（iss-00011・iss-00012・iss-00013）
+- `shipcast.collect`：`COLLECTORS`。`shipcast.collect.base`：`collect_repo(store, repo, day, *, tz, collectors)`・`CollectError`（iss-00011・iss-00012・iss-00013）
 - `shipcast.models`：`get_route(model_cfg)` が返す `GuardedRoute`（`name`・`model`・`complete(prompt, *, system, want_json)`）。`fake` の経路は `responder` で応答を決める（iss-00014）
 - `shipcast.analyze`：`analyze(events, route, *, store, repo_id, day) -> list[Story]`、`AnalyzeFailed`（iss-00015）
 
@@ -42,7 +42,7 @@ excludes: [
 	"日誌の配信・一覧の表示（epic-00005）",
 	"公開の方針（公開の範囲・NGワード）による絞り込み（epic-00006 以降）",
 	"本物の `codex`・`claude`・`agy` を呼ぶ試験。本物の経路での確かめは、本人の手動の実行だけ",
-	"`shipcast.model`・`shipcast.state`・`shipcast.models`・`shipcast.analyze`・`shipcast.collect`・`shipcast.config` の変更",
+	"`shipcast.model`・`shipcast.state`・`shipcast.models`・`shipcast.analyze`・`shipcast.collect`（`base` を含む）・`shipcast.config` の変更",
 ]
 
 requirements: {
