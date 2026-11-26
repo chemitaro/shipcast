@@ -30,8 +30,21 @@ ID: "iss-00014"
 
 ## Outcome
 
+- S-01 `55cd0ee36be55027a8f1ec7a76a72bfb5b165ecb`。文章・JSONの伏せる処理（T-02）。
+- S-02 `03ff1fdb60e6ac65c3492c5846fd54314d1def13`。エージェントの印の検出（T-04 の関数）。
+- S-03 `31a643cc0c2b5013a876362f43993cef56fd92c2`。4経路、共通の入口、エラー処理、runner（T-01、T-03〜06、T-08〜10）。
+
 ## Verification
 
+- 開始点 `f68349a24851528b6c42e4f0ad6e84388e29ea91`。仕様レビューで固定した3つの SHA-256 と一致。順に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が成功（165件、既存の失敗なし）。実装 worktree の `.workbench/implement/iss-00014/start.md` に記録。
+- S-01。Red は `uv run pytest -q tests/test_redact.py::test_redact_text --maxfail=1`（関数を提供するモジュールなし）、`uv run pytest -q tests/test_redact.py -k 'json or non_string'`（文の層だけでは5件失敗）。Green は文の層28件、JSON・型12件。最後に `uv run ruff check` と `uv run pytest -q tests/test_redact.py`（40件）が成功。
+- S-02。Red は `uv run pytest -q tests/test_models.py --maxfail=1`（関数を提供するモジュールなし）。Green は `uv run pytest -q tests/test_models.py`（10件）。`uv run ruff check` と `uv run pytest -q tests/test_redact.py tests/test_models.py`（50件）が成功。
+- S-03。Red → Green は `uv run pytest -q tests/test_models.py -k <選択>`。経路の選択と fake は10失敗 → 10合格、runner は5失敗 → 5合格、環境の守りは24失敗 → 34合格、CLIの呼び方と伏せる境界は10失敗 → 11合格、応答と失敗は22失敗 → 25合格、長さと UTF-8 はそれぞれ1失敗 → 合計5合格、timeoutの型と応答の Unicode 改行は3失敗 → 7合格。最後に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q tests/test_redact.py tests/test_models.py`（143件）、`uv run pytest -q`（308件）が成功。CLIの呼び方は偽の runner で確認。
+
 ## 逸脱と判断
+
+- RD-04 では、値を読む前に飛ばす空白を ASCII のスペースとタブと解釈し、D-01 のコードに合わせた。`TOKEN=\r\n` の CR と全角空白だけの値は `[伏せた]` に変わることも T-02 で確認した。
+- Codex の応答ファイルは改行を変換せず UTF-8 で読み、Antigravity の JSON は LF で行を区切る。後者は JSON の文字列中の Unicode 行区切り文字を本文として保つ。Antigravity の入力が UTF-8 に変換できない場合は、runner を呼ぶ前に `RouteFailed` とした。
+- 外部モデルの利用を禁じる依頼とリポジトリの契約を適用し、コミットメッセージはローカルで作成した。明示パスの stage、差分確認、通常の Git コミット、コミット後の親と worktree の確認を行った。
 
 ## Residual Risks / Follow-ups

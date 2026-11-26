@@ -8,7 +8,7 @@ steps: {
 		text:     "D-01。T-02 を `tests/test_redact.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/redact.py` に `REDACTED`・`RULES`・`redact` を書いて通す（Green）。秘密らしい試験の値は、明らかに架空のダミー値を、文字列の連結で組み立てる（repositoryの文に、トークンの形の文字列をそのまま置かない）。完了の条件：T-02 が通り、`uv run ruff check` が通る。"
 		realizes: ["R-02", "F-03"]
 		session:  "impl"
-		status:   "doing"
+		status:   "done"
 	}
 	"S-02": {
 		title:    "エージェントの中の検出（`agent_markers`・`in_agent_context`）"
@@ -16,6 +16,7 @@ steps: {
 		realizes: ["F-01"]
 		after:    ["S-01"]
 		session:  "impl"
+		status:   "done"
 	}
 	"S-03": {
 		title:    "経路の部品と共通の入口（`get_route`・`GuardedRoute`・4つの経路・runner・例外）"
@@ -23,6 +24,7 @@ steps: {
 		realizes: ["R-01", "R-02", "F-01", "F-02", "F-03", "F-04", "F-05"]
 		after:    ["S-02"]
 		session:  "impl"
+		status:   "done"
 	}
 	"S-04": {
 		title:    "設定の見本に、より安い分析のモデルの名前を書く"

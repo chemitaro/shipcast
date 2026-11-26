@@ -22,7 +22,7 @@ steps: {
 		realizes: ["F-02", "F-04", "F-05"]
 		after: ["S-01"]
 		session: "impl"
-		status:  "todo"
+		status:  "done"
 	}
 	"S-03": {
 		title: "配信の部品と道筋、デザインシステムの確かめ、`shipcast serve` の葉"
@@ -33,7 +33,7 @@ steps: {
 		realizes: ["R-01", "R-02", "R-03", "F-01", "F-02", "F-04", "F-05"]
 		after: ["S-02"]
 		session: "impl"
-		status:  "todo"
+		status:  "doing"
 	}
 	"S-04": {
 		title: "READMEの手順と、ブラウザーでの描画の確かめ"
