@@ -8,6 +8,7 @@ steps: {
 		text:     "D-01〜D-04。T-01〜T-04 を `tests/test_model.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/model.py` に `ModelError`、`Event`・`Neta`・`Story`・`Entry`、`event_id`・`story_id`、`to_dict`・`to_json`・`from_dict`・`from_json` を書いて通す（Green）。完了の条件：T-01〜T-04 が通り、`uv run ruff check` が通る。"
 		realizes: ["R-01", "R-03", "F-01"]
 		session:  "impl"
+		status:  "done"
 	}
 	"S-02": {
 		title:    "日誌のパスと前付けの契約（`shipcast.model`）"
@@ -15,6 +16,7 @@ steps: {
 		realizes: ["R-04", "F-02", "F-04"]
 		after: ["S-01"]
 		session: "impl"
+		status:  "done"
 	}
 	"S-03": {
 		title:    "SQLiteの状態の置き場（`shipcast.state`）"
@@ -22,6 +24,7 @@ steps: {
 		realizes: ["R-02", "R-03", "F-03"]
 		after: ["S-02"]
 		session: "impl"
+		status:  "done"
 	}
 }
 
