@@ -9,52 +9,103 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: この Scope の説明資料（題名を書き換えます）
-lead: この資料で理解できることを、初めて読む人にも分かるように1〜2文で書きます。
-category: 説明資料
-audience: 本日チームに加わった新メンバー
-status: 下書き
+title: shipcast MVP ― エージェントが書く開発日誌
+lead: AIエージェントが進めた開発を、本人が毎朝読んで理解できるように、プロジェクトごと・日付ごとの開発日誌を自動で作ります。この資料は、MVP全体の目的、仕組み、6つのEpicの分担と順番を説明します。
+category: 説明資料（Initiative）
+audience: ハッカソンでshipcastの開発を見る人、実装を担当するエージェント
+status: 仕様を確定（ハッカソン前）
 ---
-
-<!-- spec-dock:explanation-skeleton -->
-<!-- 雛形から書き換えたら、上の印の行を消します。印が残っていると、検査は「雛形のまま」と判定します。 -->
 
 ## この資料で分かること
 
 :::summary
-- 読み終えたときに理解できていることを、1文ずつ書きます。
-- 背景、仕組み、失敗時の動き、確認方法のうち、特に伝えたい点を選びます。
-- 短い Scope なら、1〜2項目でかまいません。
+- shipcastが解く問題：ソフトウェアファクトリーでは、開発は進むのに、人は何が起きたかを理解していない
+- 日誌ができるまでの4段の流れ（集める → まとめる → 書く → 描く）
+- 6つのEpicの分担と、ハッカソンの2時間で進める順番
 :::
 
 ## 背景と目的
 
-なぜこの Scope に取り組むのか、どの問題を解決するのかを具体的に説明します。
+AIエージェントが開発をほぼ自動で進めると、commitもPRもIssueも増えます。ところが、それを読んで理解する人間の時間は増えません。commitの履歴は機械の記録で、人が読み通す形ではないからです。
 
-## 全体の構成
+shipcastは、その日の出来事をGit・SpecDock・Orcaの会話から集め、人が読みやすい文体の**開発日誌**を、プロジェクトごとのWebページにします。毎朝、前日に工場が何をしたかを数分で追えることが目標です。
 
-構成要素の役割と関係を説明します。図は、理解を大きく助ける場合だけ入れます。
+おまけとして、話題ごとの**ネタポイント**がたまると、日誌に「発信の芽」の印が付き、Xの投稿の下書きを作れます。投稿そのものは本人が行います。
 
-```plantuml id=overview
+## 全体の流れ
+
+```plantuml id=flow
 @startuml
-title 全体の構成
-top to bottom direction
-actor "利用者" as User
-component "説明対象の仕組み" as System
-database "データ" as Data
-User -> System : 操作する
-System -> Data : 読み書きする
-System --> User : 結果を返す
+title 日誌ができるまで
+left to right direction
+rectangle "Git" as Git
+rectangle "SpecDock" as SD
+rectangle "Orcaの会話\n（任意）" as Orca
+rectangle "集める\ncollector" as C
+rectangle "まとめる\n分析（Codex）" as A
+rectangle "書く\nGemini 4 Neon" as W
+file "日誌のMarkdown\n（Gitの外）" as MD
+rectangle "描く\nshipcast serve" as V
+actor "本人" as U
+Git --> C
+SD --> C
+Orca --> C
+C --> A : 出来事
+A --> W : 話題の骨組み
+W --> MD
+MD --> V
+V --> U : Tailscaleで読む
 @enduml
 ```
 
-## 確認方法
+:::flow
+- **集める** — Git・SpecDock（必須）とOrcaの会話（任意）から、その日の出来事（Event）を集める。モデルは使わない {icon=database}
+- **まとめる** — 安いモデル（Codex。GPT-6.2 Sol、より安いモデルで足りればそれ）が、出来事を話題（Story）にまとめる {icon=search}
+- **書く** — Antigravityの `agy -p` で、Gemini 4 Neonが「要約＋読み物」の日誌を書く {icon=pencil}
+- **描く** — Markdownのファイルを、配信のときにデザインシステムでWebページにする {icon=globe}
+:::
 
-読者が手元で確かめられる手順を書きます。
+## 置き場
+
+:::keyvalue cols=1
+- 設定 | `~/.config/shipcast/config.toml`（登録したrepository、モデルの経路、配信）
+- 状態 | `~/.local/state/shipcast/`（SQLite。出来事・話題・実行の記録・ネタポイント）
+- 日誌 | `~/.local/share/shipcast/journal/<repo>/<年>/<日付>.md`
+:::
+
+どれもrepositoryの外です。shipcastのrepositoryはpublicなので、個人の情報を入れません。
+
+## Epicの分担と順番
+
+:::roadmap
+- **最初の15分** E1 基盤 — CLI、設定、データの形、状態の置き場。ほかの全Epicの約束 {doing}
+- **並行** E2 収集 — Git・SpecDock・Orcaの収集 {todo}
+- **並行** E4 閲覧 — 見本の日誌で、配信とページを先に作る {todo}
+- **E2の後** E3 執筆 — 分析と書き手のモデル、日誌のMarkdown {todo}
+- **時間があれば** E5 おまけ — ネタポイントとXの下書き {todo}
+- **時間があれば** E6 夜の自動実行 — 毎晩3時の `shipcast run` {todo}
+:::
+
+E1が入れば、E2とE4は別々の作業者で同時に進められます。E3はE2の出来事を使い、E5とE6はE3の後です。
+
+## 守ること
+
+:::warning 外へ出さない・書き換えない
+- shipcastは、X・note・Redditへ投稿しません。下書きまでです
+- 対象のrepositoryは読むだけです（fetch、checkout、indexの書換えをしません）
+- 秘密情報らしい文字列は、モデルに渡す前に伏せます
+- Antigravityの規約に合わせ、エージェントの中からは `agy` を呼びません。呼ぶのはshipcastの夜の処理と本人の手動の実行だけです
+:::
+
+## 確かめ方
 
 ```sh
-spec-dock active show --json
+uv run shipcast repo add /path/to/shipcast
+uv run shipcast run --date 2026-11-26
+uv run shipcast serve   # http://127.0.0.1:8765/
 ```
+
+ハッカソンでは、E1〜E4が動き、shipcast自身の日誌がWebページで読めれば成功です。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>
