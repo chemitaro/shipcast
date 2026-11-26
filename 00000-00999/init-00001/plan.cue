@@ -1,33 +1,43 @@
 package spec
 
-// 計画（Initiative）。型 specdock/v1。
-// Initiative の計画は、子の Scope への切り分けを持つ。実装の手順とテストは子の Scope が持つので、
-// steps と tests は書かない。
+goal: "ハッカソン（2時間）の中で、shipcast自身のrepositoryの日誌がWebページで読めるところまで、段階を見せながら作る。"
 
-// 目標（任意）。
-// goal: "..."
-
-// 子の Scope への切り分け。子の ID（epic-00001 など）をキーにする。covers（子に任せる要件・失敗の条件の番号）が必須。
-// すべての要件を、いずれかの子に任せる。standard 以上では、それが「確かめるテストがある」にも当たり、
-// strict 以上では、すべての失敗の条件を任せ、どの子にも、任せる番号を書く。
-// 子の題名は GitHub に、子の保証レベルは子の requirement.cue にあるので、ここには書かない。
 slices: {
-	// "epic-00001": {
-	// 	covers: ["R-01", "F-01"]
-	// 	text:   "この Epic に任せること"
-	// 	after: ["epic-00002"]
-	// 	session: "coord"
-	// }
+	"epic-00002": {
+		covers: ["R-01", "R-07"]
+		text:   "全Epicが使う約束（CLI、設定、データの形、状態）。最初に作る"
+	}
+	"epic-00003": {
+		covers: ["R-02", "F-03"]
+		text:   "Git・SpecDock・Orcaの収集"
+		after: ["epic-00002"]
+	}
+	"epic-00004": {
+		covers: ["R-01", "R-03", "F-01", "F-02", "F-04"]
+		text:   "分析と執筆。日誌のMarkdownを書く"
+		after: ["epic-00002", "epic-00003"]
+	}
+	"epic-00005": {
+		covers: ["R-04"]
+		text:   "日誌の配信。E1の後、見本の日誌を使ってE2・E3と並行に作れる"
+		after: ["epic-00002"]
+	}
+	"epic-00006": {
+		covers: ["R-06"]
+		text:   "おまけ。ネタポイントとXの下書き"
+		after: ["epic-00004"]
+	}
+	"epic-00007": {
+		covers: ["R-05"]
+		text:   "夜の自動実行"
+		after: ["epic-00004", "epic-00005"]
+	}
 }
 
-// 検証のしかた、戻し方、終わりの条件（任意）。critical では、切り分けがあれば rollback が要る。
-// verification: "..."
-// rollback:     "..."
-// exit:         "..."
+verification: "shipcast自身を登録し、`shipcast run --date <今日>` で日誌ができ、`shipcast serve` で表紙・一覧・その日の日誌が読めること。"
+exit:         "ハッカソンでは、E1〜E4が動けば成功。E5・E6は時間があれば。"
 
-// 実行の割り当て（任意）。切り分けの session は、ここのセッションの名前を指す。
-// レビューの after は、どの切り分けの後かを指す。モデルと推論の名前は、どんな文字列でもよい。
-// execution: {
-// 	sessions: coord: {task: "統括", model: "...", effort: "...", rationale: "..."}
-// 	reviews: gate: {role: "最終の確かめ", after: "epic-00001", model: "...", effort: "..."}
-// }
+execution: sessions: {
+	spec: {task: "仕様化（起動した側が選んだ値の記録）", model: "Claude Opus 5.5", effort: "この会話の設定", rationale: "本人との会話の中で統括役が書いた"}
+	impl: {task: "Issueの実装（Orcaの作業者）", model: "GPT-6.2 Sol", effort: "medium", rationale: "テストで確かめられる実装の既定（本人の方針）"}
+}

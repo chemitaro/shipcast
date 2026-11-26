@@ -1,48 +1,37 @@
 package spec
 
-// 要件（Epic）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "standard"
 	reason: "ほかの全Epicが使う約束を決める。手元だけの新しい道具で、作り直せる"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Epic が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "ほかのEpicが同時に作業できるように、CLI・設定・データの形・状態の置き場の約束を、最初に動く形で決める。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {
+		title: "`shipcast` のコマンドが動き、下位のコマンドの骨組みがある"
+		text:  "下位のコマンド：`repo add|list`、`collect`、`write`、`run`、`serve`、`draft`、`schedule`。中身は各Epicが作る。"
+		acceptance: ["`uv run shipcast --help` が下位のコマンドを示す", "`uv run pytest -q` が通る"]
+	}
+	"R-02": {
+		title: "設定ファイルで、対象のrepositoryとモデルの経路と置き場を決められる"
+		acceptance: [
+			"`shipcast repo add <path>` で、SpecDockを使うrepositoryが設定に加わる",
+			"SpecDockを使っていない（`spec-dock/workspace.json` がない）repositoryは加えずに止まる",
+		]
+	}
+	"R-03": {
+		title: "出来事（Event）・話題（Story）・日誌（Entry）のデータの形が、コードの型として1か所にある"
+		acceptance: ["各Epicが同じ型を読み込んで使う", "型には `schema = 1` の版がある"]
+	}
+	"R-04": {
+		title: "状態（出来事、話題、実行の記録、ネタポイント）がrepositoryの外のSQLiteに残る"
+		acceptance: ["同じ出来事を二度保存しても、1件のまま（安定したIDで重複を除く）"]
+	}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {title: "設定ファイルがない・壊れているときは、直し方を示して止まる"}
 }
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]

@@ -1,23 +1,6 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "`shipcast.model`", text: "dataclass（`frozen=True`）と `to_json`・`from_json`。`event_id(source, repo_id, native_id)` は sha256 の先頭16桁。", satisfies: ["R-01", "R-03"]}
+	"D-02": {title: "`shipcast.state.Store`", text: "`Store(state_dir)` が `state.sqlite3` を開き、表を作る（epic-00002 の D-04）。`add_events`、`events_for(repo, date)`、`save_stories`、`stories_for`、`record_run`、`add_neta`、`neta_balance(repo)`。", satisfies: ["R-02", "R-03"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]
