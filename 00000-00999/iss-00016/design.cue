@@ -1,23 +1,7 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "`shipcast.write`", text: "プロンプト `prompts/write.md`（文体：要約＋読み物、です・ます調。使ってよいタグ：summary、warning、checklist、metrics。話題にない事実を書かない）。前付けと数字はshipcastが機械で作る。", satisfies: ["R-01", "R-02", "F-02"]}
+	"D-02": {title: "ファイルの置き換え", text: "同じフォルダーの一時ファイルに書き、`os.replace` で置き換える。", satisfies: ["F-01"]}
+	"D-03": {title: "出来事のない日", text: "Eventが0件なら、前付けと1行だけを書く。", satisfies: ["R-03"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]

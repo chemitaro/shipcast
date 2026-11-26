@@ -1,48 +1,20 @@
 package spec
 
-// 要件（Issue）。型 specdock/v1。書き方は spec-dock/docs/authoring/ のガイドにある。
-// 文章の項目には Markdown を書いてよい。型にない項目は、必要に応じて足してよい。
-
-// 型の版。消さない。
 schema: "specdock/v1"
 
-// 保証レベル（light、standard、strict、critical）と、その理由。
-// 失敗したときの影響と回復の難しさで選ぶ（工数や作業の難しさでは選ばない）。
-// 具体化や作業の途中で、上げても下げてもよい。正本はここだけで、ほかの場所に写さない。
 assurance: {
 	level:  "light"
 	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る"
 }
 
-// 目的と背景（任意）。
-// purpose:    "この Issue が実現する価値"
-// background: "解く問題と、関係者"
+purpose: "その日の出来事を、分析のモデルで話題（Story）にまとめ、保存する。"
 
-// 対象と対象外（任意）。
-// includes: ["..."]
-// excludes: ["..."]
-
-// 観測できる要件。番号（R-01、R-02、…）をキーにする。
-// title は必須。acceptance（観測できる受け入れの条件）は standard 以上で必須。
 requirements: {
-	// "R-01": {
-	// 	title: "利用者が〜できる"
-	// 	text:  "詳しい説明"
-	// 	acceptance: ["〜が観測できる"]
-	// }
+	"R-01": {title: "関係する出来事を1つの話題にまとめ、what・why・notice・waiting・neta（0〜3）を付ける"}
+	"R-02": {title: "応答は決まったJSONの形で受け、形が合わなければ1回だけ頼み直す"}
+	"R-03": {title: "話題を状態に保存してから、次の段へ渡す"}
 }
 
-// 失敗・境界の条件。番号（F-01、…）をキーにする。
-// title は必須。impact（起きたときの影響）と recovery（回復のしかた）は strict 以上で必須。
 failures: {
-	// "F-01": {
-	// 	title:    "〜のときは、何も書かずに止まる"
-	// 	impact:   "〜"
-	// 	recovery: "〜"
-	// }
+	"F-01": {title: "2回とも形が合わないときは、失敗として記録し、出来事は残す"}
 }
-
-// 制約・前提、合意した判断、未解決事項（任意）。
-// constraints: ["..."]
-// decisions: ["..."]
-// questions: ["..."]

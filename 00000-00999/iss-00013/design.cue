@@ -1,23 +1,5 @@
 package spec
 
-// 設計（Issue）。型 specdock/v1。
-
-// 設計目標、今の状態と、この Issue の後の状態（任意）。
-// goals: ["..."]
-// current: "..."
-// target:  "..."
-
-// 設計の単位（責務、interface、data など）。番号（D-01、…）をキーにする。
-// title と satisfies（満たす要件・失敗の条件の番号）が必須。
-// standard 以上では、すべての要件に、それを満たす設計が要る。
 design: {
-	// "D-01": {
-	// 	title:     "〜の部品"
-	// 	text:      "責務と interface"
-	// 	satisfies: ["R-01"]
-	// }
+	"D-01": {title: "`shipcast.collect.orca`", text: "epic-00003 の D-04。最初に `orca agent-context` と `orca search --help` で、pathと時刻で絞って会話を読む方法を確かめる。1つの会話を1件のEventにまとめ、本文は発言を時刻の順につなぐ。", satisfies: ["R-01", "R-02", "F-01"]}
 }
-
-// 移行・互換性、リスク（任意）。
-// compatibility: "..."
-// risks: ["..."]
