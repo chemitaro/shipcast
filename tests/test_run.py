@@ -1,3 +1,5 @@
+import errno
+import fcntl
 import json
 from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
@@ -299,9 +301,14 @@ def test_run_rejects_invalid_repository_selection_before_creating_state(
     assert not run_cli.journal_dir.exists()
 
 
-def test_run_records_route_setup_failure_for_each_repository(run_cli, monkeypatch, capsys):
+@pytest.mark.parametrize("marked", [False, True])
+def test_run_records_route_setup_failure_for_each_repository(run_cli, monkeypatch, capsys, marked):
+    reason = "試験用の経路の失敗"
+    if marked:
+        reason += ": Operation not permitted"
+
     def fail_route(config):
-        raise RouteFailed("fake", reason="試験用の経路の失敗")
+        raise RouteFailed("fake", reason=reason)
 
     monkeypatch.setattr(run_cli.module, "get_route", fail_route)
     assert main(["run"]) == 1
@@ -310,12 +317,14 @@ def test_run_records_route_setup_failure_for_each_repository(run_cli, monkeypatc
     output = capsys.readouterr()
     diagnostic = "shipcast run: モデルの経路を作れません:"
     assert diagnostic in output.err
+    assert ("フルディスクアクセス" in output.err) is marked
     with Store(run_cli.state_dir) as store:
         for repo_id in REPOS:
             (record,) = store.runs_for(repo_id)
             assert record.result == "failed"
             assert record.started_at == record.finished_at
-            assert diagnostic in record.error and "試験用の経路の失敗" in record.error
+            assert diagnostic in record.error and reason in record.error
+            assert ("フルディスクアクセス" in record.error) is marked
 
 
 def test_run_reports_unusable_state_directory(run_cli, monkeypatch, capsys):
@@ -346,3 +355,120 @@ def test_run_reports_config_errors_before_creating_state(
     error = capsys.readouterr().err
     assert "shipcast run:" in error and diagnostic in error and "直し方:" in error
     assert not run_cli.state_dir.exists()
+
+
+def test_run_skips_locked_state_before_opening_store_or_routes(run_cli, monkeypatch, capsys):
+    run_cli.state_dir.mkdir()
+    lock_path = run_cli.state_dir / "run.lock"
+
+    def unexpected_route(config):
+        pytest.fail("ロックが取れないときに経路を作りました")
+
+    with lock_path.open("w") as lock, monkeypatch.context() as blocked:
+        blocked.setattr(run_cli.module, "get_route", unexpected_route)
+        fcntl.flock(lock, fcntl.LOCK_EX)
+
+        assert main(["run"]) == 0
+        output = capsys.readouterr()
+        assert output.out == ""
+        assert output.err.splitlines() == [
+            f"shipcast run: 前の実行が動いているため、今回は何もせずに終えます: {lock_path}"
+        ]
+        assert run_cli.collector.calls == []
+        assert not (run_cli.state_dir / "state.sqlite3").exists()
+        assert not run_cli.journal_dir.exists()
+
+    assert main(["run"]) == 0
+    assert run_cli.collector.calls == list(REPOS)
+
+
+@pytest.mark.parametrize("interrupted", [False, True])
+def test_run_releases_lock_and_leaves_lock_file(run_cli, monkeypatch, interrupted):
+    if interrupted:
+
+        def interrupt(*args, **kwargs):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(run_cli.module, "write_day", interrupt)
+        with pytest.raises(KeyboardInterrupt):
+            main(["run"])
+    else:
+        assert main(["run"]) == 0
+
+    lock_path = run_cli.state_dir / "run.lock"
+    assert lock_path.is_file()
+    with lock_path.open("r+") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+@pytest.mark.parametrize("marked", [False, True])
+def test_with_tcc_hint_only_adds_instructions_to_marked_errors(run_cli, marked):
+    base = "git: Operation not permitted" if marked else "git: Permission denied"
+    message = run_cli.module.with_tcc_hint(base)
+    if marked:
+        original, hint = message.split("\n", 1)
+        assert original == base
+        assert "フルディスクアクセス" in hint
+        assert "launchd" in hint and "ターミナル" in hint
+    else:
+        assert message == base
+
+
+@pytest.mark.parametrize(
+    ("failure", "diagnostic", "hint_expected"),
+    [
+        ("collect", "Operation not permitted", True),
+        ("write", "Operation not permitted", True),
+        ("probe-eperm", "Operation not permitted", True),
+        ("probe-eacces", "Permission denied", False),
+        ("missing-path", "ディレクトリがありません", False),
+    ],
+)
+def test_run_preserves_diagnostics_and_adds_tcc_hint_when_applicable(
+    run_cli, monkeypatch, capsys, failure, diagnostic, hint_expected
+):
+    failed_repo, next_repo = REPOS
+    run = run_cli.module
+    missing_path = run_cli.config_path.parent / failed_repo
+
+    if failure == "collect":
+        run_cli.collector.errors[failed_repo] = (
+            f"git rev-parse が失敗しました: /Volumes/x/demo-app: fatal: {diagnostic}"
+        )
+    elif failure == "write":
+        write_day = run.write_day
+
+        def fail_write(store, repo_id, day, **kwargs):
+            if repo_id == failed_repo:
+                raise PermissionError(errno.EPERM, diagnostic, "/Volumes/x")
+            return write_day(store, repo_id, day, **kwargs)
+
+        monkeypatch.setattr(run, "write_day", fail_write)
+    elif failure.startswith("probe-"):
+        error_number = errno.EPERM if failure == "probe-eperm" else errno.EACCES
+
+        def fail_probe(path):
+            if path == missing_path:
+                raise PermissionError(error_number, diagnostic, str(path))
+
+        monkeypatch.setattr(run, "probe_readable", fail_probe)
+    else:
+        missing_path.rmdir()
+        run_cli.collector.errors[failed_repo] = f"{missing_path}: {diagnostic}"
+
+    assert main(["run"]) == 1
+    stderr = capsys.readouterr().err
+    assert diagnostic in stderr and "Traceback" not in stderr
+    assert ("フルディスクアクセス" in stderr) is hint_expected
+    expected_calls = [next_repo] if failure.startswith("probe-") else list(REPOS)
+    assert run_cli.collector.calls == expected_calls
+    assert not journal_path(run_cli.journal_dir, failed_repo, DAY).exists()
+    assert journal_path(run_cli.journal_dir, next_repo, DAY).is_file()
+    with Store(run_cli.state_dir) as store:
+        (failed,) = store.runs_for(failed_repo)
+        (succeeded,) = store.runs_for(next_repo)
+    assert failed.result == "failed" and diagnostic in failed.error
+    assert ("フルディスクアクセス" in failed.error) is hint_expected
+    assert (succeeded.result, succeeded.error) == ("ok", "")
+    if failure == "missing-path":
+        assert failed.error == f"git: {missing_path}: {diagnostic}"
