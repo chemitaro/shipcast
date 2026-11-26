@@ -43,11 +43,11 @@ tests: {
 		verifies: ["R-03"]
 	}
 	"T-05": {
-		title:    "`collect_repo` で、`CollectError` を投げるcollectorが `errors` に `<name>: <文>` で入り、ほかのcollectorのEventは保存される。警告が `<name>: <文>` で入る。`source` の違う・`repo_id` の違う・時刻がその日の外（`day_bounds` の終わりちょうどを含む）のEventを返すcollectorは、そのEventが全部保存されず `errors` に入る。`COLLECTORS` の `name` が重ならず `SOURCES` にあり、最初が `git`（S-03 の後）。`day_bounds` が `Store.events_for` と同じ区切り"
+		title:    "`collect_repo` で、`CollectError` を投げるcollectorが `errors` に `<name>: <文>` で入り、ほかのcollectorのEventは保存される。警告が `<name>: <文>` で入る。`source` の違う・`repo_id` の違う・時刻がその日の外（`day_bounds` の終わりちょうどを含む）のEventを返すcollectorは、そのEventが全部保存されず `errors` に入り、そのcollectorの警告は残る。`COLLECTORS` の `name` が重ならず `SOURCES` にあり、最初が `git`（S-03 の後）。`day_bounds` が `Store.events_for` と同じ区切り"
 		verifies: ["R-01"]
 	}
 	"T-06": {
-		title:    "CLI：`--repo` を省くと登録の全部を設定の順に集める。`--date` を省くと設定の timezone の今日（`datetime.now` を固定して確かめる）。警告だけなら終了コード0で標準エラーに `shipcast collect: 警告: ` の行。登録にない `--repo`、登録が0件、設定ファイルがない、読めない `--date`（終了コード2、usage）、状態の置き場がSQLiteでないファイルで、D-03 の文と終了コード。どの失敗でも状態に何も書かない（ないときは置き場を作らない。設定ファイルが読めない場合と `--repo` の誤りの場合）"
+		title:    "CLI：`--repo` を省くと登録の全部を設定の順に集める。`--date` を省くと設定の timezone の今日（`datetime.now` を固定して確かめる）。警告だけなら終了コード0で標準エラーに `shipcast collect: 警告: ` の行。登録にない `--repo`、登録が0件、設定ファイルがない、読めない `--date`（終了コード2、usage）、状態の置き場の `state.sqlite3` がSQLiteでないファイル（`StateError`）、`state_dir` が普通のファイル（`OSError`）で、D-03 の文と終了コード。どの失敗でも状態に何も書かない（ないときは置き場を作らない。設定ファイルが読めない場合と `--repo` の誤りの場合）"
 		verifies: ["R-01", "F-02"]
 	}
 	"T-07": {

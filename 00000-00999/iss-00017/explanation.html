@@ -9,28 +9,290 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: iss-00017 日誌のページを配信する
-lead: `shipcast serve` で、日誌のMarkdownをデザインシステムで描くページとして返します。
+title: iss-00017 日誌のページを配信する（shipcast serve）
+lead: 日誌のMarkdownを、デザインシステムで描くWebページとして手元から配信します。tailnetの端末から読まれる「境界」なので、パス・エスケープ・CSP・Hostの4つの守りを、それぞれ1か所の関数にします。
 category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+audience: このIssueの実装・レビューを初めて担当する人
+status: 仕様レビュー中
+tags: [配信, セキュリティ, strict]
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-`shipcast serve` で、日誌のMarkdownをデザインシステムで描くページとして返します。親のE4の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- `<\/script>` を含むMarkdownも壊れない
-- 置き場の外のpathは返さない
-- READMEにTailscaleの手順
+:::summary
+- `shipcast serve` が何を返し、何を返さないか（道筋と応答の一覧）
+- 1つの要求が、Hostの検査からページの包みまで、どの順に通るか
+- 4つの守り（パスの検査、`<\/script` の扱い、CSP、Hostの検査）が、それぞれ何を防ぐか
+- 仕様を書く途中の試作で分かり、親のEpicの案から改めた2点（`'wasm-unsafe-eval'` と `<!--` の扱い）
+- 誰がどの手順を実装し、どの関門で確かめるか
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`strict`** です。tailnetから読まれるHTTPの配信の境界なので `strict` にしました。パスの検査（`..`・符号化・symlink）、`</script` と `<!--` の置き換え、CSPのヘッダーを1か所ずつの関数にします。ページの枠と見た目は、本人の方針で Opus 5.5 が直接実装します。
+## 背景：なぜ「配信」が strict なのか
+
+shipcastは、エージェントがその日の出来事から開発日誌を書く道具です。日誌は `~/.local/share/shipcast/journal/<repo>/<年>/<日付>.md` のMarkdownのファイルとして毎晩増えていきます。本人はそれを、スマートフォンやほかの端末のブラウザーで、ブログのように読みたいと考えています（本人の決定 3・11・12）。
+
+そのために、手元のPCで小さなHTTPのサーバー `shipcast serve` を立て、Tailscaleのtailnet（本人の端末だけがつながる私的なネットワーク）から読めるようにします。
+
+:::warning この配信は「境界」です
+手元のサーバーは、同じPCの設定ファイルや鍵と同じディスクを読めます。パスの検査を1つ誤ると、tailnetの端末に `~/.ssh` の中身を返しかねません。また、日誌の本文はcommitの文や会話から作られるので、本文に混ざった `<\/script>` や `<img onerror=…>` がページの中で動く余地があります。外へ出た内容は取り消せないため、保証レベルは **`strict`** です（本人の決定 24）。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+:::glossary
+- **tailnet**（テイルネット）: Tailscaleでつないだ、本人の端末だけの私的なネットワーク。
+- **デザインシステム**: SpecDockが配る `ds.css`・`ds.js`。Markdown用の `<script>`（`id` が `ds-source`）の中のMarkdownを、部品つきのページに描く。
+- **CSP**（シーエスピー）: Content-Security-Policy。ブラウザーに「このページでは、どこから来たscriptだけを動かしてよいか」を伝える応答のヘッダー。
+- **DNSの付け替え**（DNS rebinding）: 外のWebページが、自分の名前の行き先を 127.0.0.1 に付け替え、手元のサーバーを自分と同じ生まれ（origin）として読む攻撃。
+- **パストラバーサル**: `../` などで、決めた置き場の外のファイルを読ませる攻撃。
+:::
+
+## 道筋と応答
+
+このIssueで返すのは、日誌の1日のページと、デザインシステムのファイルだけです。表紙と一覧は次の iss-00018 が足します。
+
+:::datatable 道筋の一覧
+| 道筋 | 返すもの | 状態 |
+|---|---|---|
+| `/<repo>/<YYYY-MM-DD>` | 日誌のMarkdownを包んだHTML | 200（ないと404、前付けが壊れていると500） |
+| `/_ds/ds.css`・`/_ds/ds.js`・`/_ds/vendor/marked.umd.js` | デザインシステムのファイル | 200 |
+| `/_ds/` の下の、許していない拡張子・ディレクトリ | なし | 404 |
+| `/`・`/<repo>/` | なし（iss-00018 で表紙と一覧になる） | 404 |
+| 置き場の外を指す道筋（`..`、`%2e%2e`、`%2f`、symlink など） | なし（中身を読まない） | 404 |
+| `POST` などの書き込みの方法 | なし | 405 |
+| Hostが手元・tailnetの名前でない要求 | なし（中身を読まない） | 400 |
+:::
+
+404と500のときも、日誌と同じデザインシステムで描いた案内のページを返します。案内には、要求された道筋やファイルの道筋を書きません。反射した文字列が、Markdownや生のHTMLとして動くのを避けるためです。
+
+## 全体の構成
+
+```plantuml id=overview
+@startuml
+title shipcast serve の構成
+left to right direction
+actor "本人の端末\n（tailnet）" as Reader
+node "本人のPC" {
+  component "tailscale serve\n（本人が1回だけ設定）" as TS
+  component "shipcast serve\n127.0.0.1:8765" as Serve
+  folder "日誌の置き場\njournal_dir" as Journal
+  folder "デザインシステム\nspec-dock/design-system" as DS
+}
+cloud "unpkg.com\n（図と色分けの部品）" as CDN
+Reader --> TS : HTTPSで読む
+TS --> Serve : 手元へ中継する
+Serve --> Journal : 日誌を読む
+Serve --> DS : /_ds/ で配る
+Reader ..> CDN : ブラウザーが部品を読む
+@enduml
+```
+
+:ref[overview] のとおり、`shipcast serve` は既定で `127.0.0.1`（同じPCからしかつながらない場所）で待ち受けます。tailnetへ出すのは、本人がREADMEの手順で1回だけ実行する `tailscale serve --bg 8765` です。shipcastはTailscaleの設定を自分では変えません。
+
+:::cards cols=2
+### shipcast.page {icon=type badge=画面}
+ページの包み方 `wrap_markdown(markdown, title)` と、404・500の案内のページ。**Opus 5.5 が直接実装します**（本人の決定 20）。iss-00018 の表紙と一覧もこれを使います。
+
+### shipcast.serve {icon=server badge=ロジック}
+道筋の読み取り `split_path`、パスの検査 `resolve_inside`、ヘッダー `security_headers`、Hostの検査 `host_allowed`、配信 `create_server`、置き場の決定 `find_design_system`、CLIの葉。**Codex（GPT-6.2 Sol）が実装します。**
+
+### 日誌の置き場 {icon=folder}
+`journal_dir/<repo>/<YYYY>/<YYYY-MM-DD>.md`。道筋は `shipcast.model.journal_path` が決め、前付けは `parse_journal` が読みます（epic-00002 の約束）。配信は読むだけで、書きません。
+
+### デザインシステム {icon=layers}
+設定の `serve.design_system_dir`、空なら登録したrepositoryの `spec-dock/design-system/`。shipcastの中に写しません。起動のときに `ds.css` と `ds.js` を確かめ、なければ設定の仕方を示して止まります。
+:::
+
+## 1つの要求の流れ
+
+:::flow
+- **Hostを確かめる** — 手元・tailnetの名前でなければ400。ここでは何も読まない {icon=shield}
+- **道筋を読む** — 1回だけ復号し、`..`・`.` で始まる部分・バックスラッシュ・NULを拒む {icon=search}
+- **置き場の中か確かめる** — `resolve()` してから `is_relative_to` で比べる。外なら404 {icon=folder}
+- **読む** — 日誌はUTF-8で読み、前付けの `title` を取る {icon=file}
+- **包む** — `wrap_markdown` で `ds-source` に入れる {icon=code}
+- **ヘッダーを付けて返す** — CSP・nosniff・no-referrer を、すべての応答に付ける {icon=checkCircle}
+:::
+
+```plantuml id=sequence
+@startuml
+title 日誌のページを1枚返す流れ
+actor "ブラウザー" as B
+participant "ハンドラー" as H
+participant "host_allowed" as HA
+participant "split_path" as SP
+participant "resolve_inside" as RI
+participant "wrap_markdown" as W
+B -> H : GET /demo-app/2026-11-26
+H -> HA : Hostを渡す
+HA --> H : 許す
+H -> SP : 道筋を渡す
+SP --> H : ("demo-app", "2026-11-26")
+H -> RI : 日誌の置き場と相対の部分
+RI --> H : 置き場の中のファイル
+H -> W : 日誌の中身と題名
+W --> H : 包んだHTML
+H --> B : 200（CSPなどのヘッダー付き）
+@enduml
+```
+
+## 4つの守り
+
+### 守り1：パスの検査（F-02）
+
+道筋は、2段で確かめます。1段目の `split_path` は、文字の形だけで危ないものを落とします。2段目の `resolve_inside` は、symlinkをたどった **本当の場所** が置き場の中かを確かめます。
+
+:::beforeafter
+### 文字の形だけで確かめた場合
+`/_ds/notes.css` が、置き場の中にある `notes.css → ~/.ssh/id_ed25519` というsymlinkだと、文字の上では置き場の中なので返してしまいます。
+
+### resolve() してから比べた場合
+`Path.resolve()` でsymlinkをたどると `~/.ssh/id_ed25519` になり、置き場の外なので、中身を読まずに404を返します。
+:::
+
+`%2e%2e`（`..` を符号化したもの）や `..%2f`（`../`）は、1回だけ復号してから分けるので、`..` の部分として必ず落ちます。2回符号化した `%252e` は、復号しても `%2e` という変わった名前のままで、外へは出ません。
+
+### 守り2：`<\/script` と `<!--` の扱い（F-03）
+
+デザインシステムは、Markdownを `<script type="text/markdown">` の中に置きます。HTMLの仕様では、この中身は `<\/script` が来たところで閉じます。そのため、日誌の本文に `<\/script><script>…` という文字が混ざっていると、そこで包みが閉じ、後ろが本物のscriptになってしまいます。
+
+`wrap_markdown` は、本文の中の `<\/script` の `<` と `/` の間に、バックスラッシュを1つ入れます。閉じのタグの形でなくなるので、包みは閉じません。`ds.js` は読むときにバックスラッシュを外すので、ページには元の文字のまま表示されます。
+
+:::note もう1つの落とし穴：`<!--` の後の `<script`
+HTMLの仕様には、`<script>` の中身に `<!--` があり、その後に `<script` が来ると、次の閉じのタグを閉じとして扱わない状態（script data double escaped state）があります。本文に閉じていない `<!--` と `<script` があると、包みの閉じが効かず、`ds.js` の読み込みまで本文に飲み込まれ、ページが空になります。
+:::
+
+親のEpicの案では、`<!--` を `<\!--` に置き換える方法でした。仕様を書く途中で試作して、ブラウザーで確かめたところ、次のことが分かりました。
+
+:::decision `<!--` を置き換えず、本文の末尾に閉じのコメントを足す status=案（仕様レビュー中） date=2026-11-26
+### 決定
+`<!--` はそのままにし、包む本文の末尾に、改行・`<!-- -->`・改行を足します。
+### 理由
+- `ds.js` は、バックスラッシュを入れた閉じのタグだけを戻し、`<\!--` は戻しません。そのため本文の中のHTMLのコメントが、見える文字になりました。
+- さらに、コメントの中に書いた `<script>` が生のHTMLとして解釈され、後ろの本文（図を含む）を飲み込みました（試作で確認）。
+- 末尾の `<!-- -->` は、トークナイザーがどの状態にいても、通常の状態に戻します。Markdownの上では見えないコメントなので、本文の見た目を変えません。
+### 採用しなかった案
+- `<!--` を `<\!--` に置き換える（親のEpicの案）：上の理由で、本文の意味が変わる。
+- `<script` も置き換える：`ds.js` が戻さないので、本文に `<\script` という文字が出る。
+### 影響
+本文が、閉じていないコードの囲みで終わる日誌だけは、コードの中に `<!-- -->` が見えます。報告の残りのリスクに書きます。
+:::
+
+置き換えはASCIIの大文字小文字だけを同じとみなします（`re.ASCII`）。HTMLの仕様と `ds.js` の戻し方がASCIIだけを同じとみなすので、そろえないと、`ſ` のような字を含む文字列だけが置き換わって戻らない、というずれが起きます。
+
+### 守り3：CSP（F-04）
+
+デザインシステムのMarkdownは、本文に書かれた生のHTMLをそのまま描きます。本文に `<img src=x onerror="…">` が混ざると、そのままでは画像の読み込みの失敗でscriptが動きます。これは、すべての応答に付けるCSPで止めます。
+
+```text title="すべての応答に付けるヘッダー"
+Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+X-Content-Type-Options: nosniff
+Referrer-Policy: no-referrer
+```
+
+:::keyvalue cols=1
+- `script-src 'self' 'wasm-unsafe-eval' https://unpkg.com` | 自分の `ds.js` と、unpkg.com の決まった版の部品だけを動かす。インラインのscriptとイベントの属性（`onerror` など）は動かない
+- `'wasm-unsafe-eval'` | PlantUMLの図の部品がWebAssemblyで動くために要る。`'unsafe-eval'`（文字列からscriptを作る）は許さない
+- `style-src 'unsafe-inline'` | `ds.js` が部品に `style` の属性を書くので要る
+- `img-src 'self' data:` | 本文の画像で外へ情報を送らせない
+- `form-action 'none'` | 本文に混ざった `<form>` で、外へ送らせない
+- `Referrer-Policy: no-referrer` | 日誌のURLとtailnetの名前を、unpkg.com やGoogleのフォントへ送らない
+:::
+
+:::success 試作で確かめたこと（2026-11-26）
+親のEpicのCSP（`'wasm-unsafe-eval'` なし）では、図が `CompileError: WebAssembly.instantiate(): … violates the following Content Security policy directive` で描けませんでした。`'wasm-unsafe-eval'` を足すと、図・コードの色分け・部品が描け、`<img onerror>` は動かず、`<\/script>` を含むコードは文字のまま表示されました。
+:::
+
+ヘッダーは、配信のハンドラーの `end_headers()` という **1つの出口** で付けます。404や405、標準ライブラリが自分で返すエラー（501など）も、必ずこの出口を通るので、付け忘れが起きません。
+
+### 守り4：Hostの検査（F-05）
+
+127.0.0.1 で待ち受けていても、本人のブラウザーは手元のサーバーにつながれます。DNSの付け替えでは、本人が開いた外のWebページ `evil.example` が、自分の名前の行き先を 127.0.0.1 に変え、手元の日誌を「同じ生まれ」として読みます。このとき、要求のHostのヘッダーには `evil.example` が入ります。
+
+:::compare 推奨=許す
+| Hostの例 | 許す | 理由 |
+|---|---|---|
+| `127.0.0.1:8765`・`[::1]:8765` | ✓ | IPの書き方は、外のページが自分の名前として使えない |
+| `localhost` | ✓ | 手元の名前 |
+| `mac.tail1234.ts.net` | ✓ | `tailscale serve` の名前 |
+| `mac` | ✓ | MagicDNSの短い名前（点のない1語） |
+| `evil.example` | ✗ | 外の名前。付け替えの攻撃で入る |
+| `ts.net.evil.example` | ✗ | `.ts.net` で終わらない |
+:::
+
+## 失敗したときの動き
+
+:::datatable 失敗と境界の条件
+| 番号 | 場面 | 動き |
+|---|---|---|
+| F-01 | デザインシステムが見つからない | 待ち受けの前に止まり、見た場所と `design_system_dir` の書き方を示して終了コード2 |
+| F-02 | 置き場の外を指す道筋 | 中身を読まずに404 |
+| F-03 | 本文に `<\/script` や閉じない `<!--<script>` | 置き換えと末尾のコメントで、包みが必ず閉じる |
+| F-04 | 本文に生のHTMLのscriptや `onerror` | CSPで動かない |
+| F-05 | Hostが外の名前 | 中身を読まずに400 |
+| ― | 設定ファイルがない・壊れている | `直し方:` を示して終了コード1 |
+| ― | ポートが使用中 | 理由を示して終了コード1 |
+| ― | 前付けの壊れた日誌 | 500の案内のページ。理由は配信の端末の標準エラーに出す |
+:::
+
+::::details 起動の出力の例（既定の設定）
+:::terminal title="手元の端末"
+$ shipcast serve
+http://127.0.0.1:8765/<repo>/<YYYY-MM-DD> で日誌を読めます
+日誌の置き場: /home/demo/.local/share/shipcast/journal
+デザインシステム: /home/demo/src/demo-app/spec-dock/design-system
+Ctrl+C で止まります
+:::
+::::
+
+## 作業の分担と関門
+
+:::steps
+1. **S-01 包む関数と案内のページ** — `shipcast.page`。画面の部分なので、タスク担当（Opus 5.5 / high）が自分で実装します。`html5lib` を試験の依存に足し、HTMLの仕様どおりに読んで確かめます。
+2. **S-02 守りの関数** — `split_path`・`resolve_inside`・`security_headers`・`host_allowed`。Codex（GPT-6.2 Sol / medium）が実装します。
+3. **S-03 配信とCLI** — `create_server`・`find_design_system`・`shipcast serve`。Codexが続けて実装し、ここで **区切りのレビュー（CP-1）** を受けます。
+4. **S-04 READMEとブラウザーでの確かめ** — Tailscaleの手順を書き、本物のデザインシステムで、図・部品・390pxの幅・CSPの違反がないことを確かめます（Opus 5.5）。
+:::
+
+:::raci
+| 作業 | タスク担当（Opus 5.5） | 実装担当（Codex） | 統括 | 本人 |
+|---|---|---|---|---|
+| 仕様と説明資料 | A・R | | C | I |
+| S-01・S-04（画面） | A・R | | | |
+| S-02・S-03（ロジック） | A | R | | |
+| 区切りのレビュー・最終品質ゲート | A・R | | | |
+| マージ | | | R | A |
+:::
+
+関門は保証レベル `strict` の既定です。仕様レビューと最終品質ゲートには、Claudeのレビュアーに加えて、ChatGPT（GPT-6 / Extra High）の2人目が入ります。マージは、統括が本人に確かめてから行います。
+
+## 確かめ方
+
+:::terminal title="手元で流す検査（CIと同じ順）"
+$ uv sync --locked
+$ uv run ruff check
+$ uv run pytest -q
+$ uv run shipcast serve --help
+:::
+
+自動の試験は、HTTPのクライアントが正規化しない生の道筋（`/_ds/%2e%2e/x` など）を、`http.client` で直接送って確かめます。ブラウザーでの描画（T-07）は、S-04 で Orca の組み込みのブラウザーを使って手で確かめ、画面の写しと結果を報告に残します。
+
+:::risks
+| リスク | 影響 | 起きやすさ | 対応 |
+|---|---|---|---|
+| デザインシステムが将来、別のCDNやインラインのscriptを使う | 中 | 低 | T-07 の確かめで気づき、最小の許可を足す |
+| unpkg.com 全体をscriptに許している | 中 | 低 | 今の `ds.js` には、本文から別のscriptを読ませる道がない |
+| `.ts.net` でない独自の名前で読みたくなる | 低 | 低 | 許す名前を設定に足す（別のIssue） |
+| 閉じていないコードの囲みで終わる日誌 | 低 | 低 | コードの中に `<!-- -->` が見えるだけ |
+:::
+
+:::quiz `/_ds/notes.css` が、置き場の中にある「`~/.ssh/id_ed25519` へのsymlink」だったとき、配信はどうしますか？
+- [ ] 置き場の中の名前なので、200で返す
+- [x] `resolve()` で本当の場所をたどり、置き場の外なので、中身を読まずに404を返す
+- [ ] 拡張子が `.css` なので、`text/css` で返す
+> `resolve_inside` は、symlinkをたどった後の本当の場所で比べます。文字の上で置き場の中に見えても、外を指すsymlinkは返しません。
+:::
+
+要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。この資料は、それを人に説明するものです。
+<!-- -->
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

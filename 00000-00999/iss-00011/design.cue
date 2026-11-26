@@ -70,7 +70,7 @@ design: {
 
 		1. `collectors` を順に呼ぶ。`CollectError` は `errors` に `f"{collector.name}: {error}"` を足して次のcollectorへ進む。
 		2. 戻り値を確かめる。`CollectResult` でない、Eventでない要素がある、`source != collector.name`、`repo_id != repo.id`、`at` が `day_bounds` の外のEventが1つでもあれば、そのcollectorのEventを全部捨て、`errors` に `f"{collector.name}: 約束に合わないEventを返しました（<理由。最初の1件のIDか型>）"` を足す。警告は残す。
-		3. 合ったcollectorの `warnings` を `f"{collector.name}: {warning}"` にして足す。
+		3. 各collectorの `warnings` を（約束に合わなかったcollectorのものも） `f"{collector.name}: {warning}"` にして足す。
 		4. 全collectorの後に、合ったEventを1回の `store.add_events` で保存する（失敗したcollectorがあっても、ほかのcollectorのEventは保存する。保存は同じIDを無視するので、集め直しても増えない）。Eventが0件でも呼んでよい。
 		5. `runs` の表には書かない（iss-00021 が `RepoCollection` から記録する）。`StateError` と SQLite の例外は受け止めず、呼ぶ側へ投げる。
 
@@ -98,7 +98,7 @@ design: {
 		1. `load_config()`。`ConfigError` なら標準エラーに `shipcast collect: {error}`、終了コード1。
 		2. `tz = ZoneInfo(config.timezone)`、`day = args.date or datetime.now(tz).date()`。
 		3. 対象：`--repo` があれば、その `id` の1つ。登録になければ標準エラーに 「shipcast collect: 登録されていないrepositoryです: {id}」 と次の行「直し方: `shipcast repo list` で登録済みのidを確かめてください」、終了コード1。登録が0件なら標準エラーに 「shipcast collect: 登録されたrepositoryはありません。`shipcast repo add <path>` で登録できます」、終了コード1。
-		4. `Store(config.state_dir)` を開く（`with`）。`StateError` なら標準エラーに `shipcast collect: {error}`、終了コード1。
+		4. `Store(config.state_dir)` を開く（`with`）。`StateError` か `OSError`（`state_dir` が普通のファイル、作る権限がない、など。`Store.__init__` の `mkdir` が投げる）なら、標準エラーに `shipcast collect: 状態の置き場を開けません: {error}` と次の行「直し方: 設定の `state_dir` が、書き込めるディレクトリを指しているか確かめてください」、終了コード1。
 		5. 対象のrepositoryごとに、設定の順で `collect_repo(store, repo, day, tz=tz, collectors=COLLECTORS)` を呼び、次を示す。
 		   - 警告ごとに標準エラーへ `shipcast collect: 警告: {repo.id}: {warning}`
 		   - 失敗ごとに標準エラーへ `shipcast collect: 失敗: {repo.id}: {error}`
@@ -121,7 +121,7 @@ design: {
 
 		- 環境：`os.environ` の写しから `GIT_DIR`、`GIT_WORK_TREE`、`GIT_INDEX_FILE`、`GIT_OBJECT_DIRECTORY`、`GIT_ALTERNATE_OBJECT_DIRECTORIES`、`GIT_COMMON_DIR`、`GIT_NAMESPACE` を消し、`GIT_OPTIONAL_LOCKS=0`、`GIT_TERMINAL_PROMPT=0` を足す（呼んだ側の環境で別のrepositoryを読まないため）。
 		- 呼ぶsubcommandは `rev-parse`、`log`、`diff-tree` の3つだけ。
-		- `FileNotFoundError`（gitがない）、`subprocess.TimeoutExpired`、終了コードが0でない（下の1・2の判定を除く）は `CollectError` にする：`gitのコマンドが見つかりません: {self.git}`、`git {subcommand} が{timeout}秒で終わりませんでした: {path}`、`git {subcommand} が失敗しました: {path}: {標準エラーの最後の空でない行}`。
+		- `FileNotFoundError`（gitがない）、`subprocess.TimeoutExpired`、終了コードが0でない（下の手順2・3の `rev-parse` の判定を除く）は `CollectError` にする：`gitのコマンドが見つかりません: {self.git}`、`git {subcommand} が{timeout}秒で終わりませんでした: {path}`、`git {subcommand} が失敗しました: {path}: {標準エラーの最後の空でない行}`。
 
 		手順：
 
@@ -129,7 +129,7 @@ design: {
 		2. `rev-parse --show-toplevel`。終了コードが0でなければ `CollectError(f"{path}: Gitのrepositoryではありません")`。出力のpathを `Path(...).resolve()` にして `repo.path.resolve()` と違えば `CollectError(f"{path}: Gitのrepositoryの最上位ではありません（最上位: {top}）")`（親のrepositoryを読み違えないため）。
 		3. refを確かめる。`repo.ref` が `-` で始まれば `CollectError(f"{path}: ref {ref} がありません")`。`rev-parse --verify --quiet --end-of-options <ref>^{commit}` の終了コードが0でなければ同じ誤り。出力のSHA（40桁）を `tip` とし、以後は `tip` だけを読む。
 		4. 正本の歴史：`log --first-parent -z --no-show-signature --no-color --format=<FMT> --since=<S> --until=<U> --end-of-options {tip}`。`<S>`・`<U>` は `day_bounds` の両端をUTCに直した `"%Y-%m-%d %H:%M:%S +0000"`。gitの `--since`・`--until` は枝を刈るためだけに使い、各commitの時刻 `committed` を `start <= committed < end` で絞り直す（端の秒の扱いをgitに任せない）。
-		5. 各mergeが取り込んだcommit：4で残った親が2つ以上の `M` ごとに、`log -z --no-show-signature --no-color --format=<FMT> --max-count={max_merged + 1} --end-of-options {M} ^{Mの第1の親}` を読み、`M` 自身を除く。`max_merged` 件を超えたら先頭（新しい方）の `max_merged` 件だけにし、警告 `マージ {M[:12]} が取り込んだcommitが{max_merged}件を超えたので、{max_merged}件だけを集めました` を足す。
+		5. 各mergeが取り込んだcommit：4で残った親が2つ以上の `M` ごとに、`log -z --no-show-signature --no-color --format=<FMT> --max-count={max_merged + 2} --end-of-options {M} ^{Mの第1の親}` を読み、`M` 自身を除く（出力には必ず `M` 自身が入るので、上限は `M` と `max_merged + 1` 件の分にする）。除いた後に `max_merged` 件を超えたら先頭（新しい方）の `max_merged` 件だけにし、警告 `マージ {M[:12]} が取り込んだcommitが{max_merged}件を超えたので、{max_merged}件だけを集めました` を足す。
 		6. 変更したファイルの数：commit `C` ごとに、親があれば `diff-tree -r -z --no-commit-id --name-only {Cの第1の親} {C}`、親がなければ `diff-tree -r -z --no-commit-id --name-only --root {C}` を読み、NULで区切った空でない項目を数える（mergeは第1の親との違い、つまり正本に入った変更）。
 
 		`<FMT>` は `%H%x1f%P%x1f%cI%x1f%an%x1f%s%x1f%b`。`-z` でcommitの間がNULになるので、出力をNULで分け、空の項目を捨て、各項目を `\\x1f` で最大5回分ける（本文は最後の項目なので、本文の中の `\\x1f` も残る）。`%P` は空白で分ける（`--first-parent` でも全部の親が出ることを確かめた。git 2.56）。`%cI` は `datetime.fromisoformat` で読む。
