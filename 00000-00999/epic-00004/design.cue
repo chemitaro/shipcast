@@ -9,7 +9,7 @@ design: {
 		| 経路 | 呼び方（実装の最初に `--help` で確かめる） |
 		|---|---|
 		| `codex` | `codex exec -m <model> -c model_reasoning_effort=<effort> --sandbox read-only --skip-git-repo-check -`（プロンプトは標準入力） |
-		| `antigravity` | `agy -p <prompt> --output-format json`。モデルと思考の深さの指定、道具の禁止。`--dangerously-skip-permissions` は使わない |
+		| `antigravity` | `agy -p <prompt> --output-format json`。モデルと思考の深さの指定、道具は引数で狭める（`--mode plan`・`--sandbox`・空の作業ディレクトリ。1回だけ道具を止める方法が文書にないため。残る危険は本人が受け入れた、2026-11-26、iss-00014 の F-05）。`--dangerously-skip-permissions` は使わない |
 		| `claude` | `claude -p --model <model> --tools ""`（予備） |
 		| `fake` | 入力から決まった応答を返す（試験とデモの予行） |
 

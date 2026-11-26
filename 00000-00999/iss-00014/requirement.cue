@@ -13,7 +13,7 @@ background: """
 - 親の epic-00004 の R-01・F-02・F-03 を、この Issue が受け持つ（epic-00004 の `plan.cue` の `slices`）。後の iss-00015（まとめる）と iss-00016（書く）は、この Issue の `get_route` と `GuardedRoute.complete` だけを通してモデルを呼ぶ。
 - 設定は `main` の `shipcast.config` が読む。`ModelConfig(route, model, effort, thinking)` で、`models.analyst.route` は `codex`・`claude`・`fake`、`models.writer.route` は `antigravity`・`claude`・`codex`・`fake` だけが通る（読む段で検証済み）。
 - 本人の決定（`content/decisions/20261126-journal-format-and-hackathon-plan.md`）：書き手は Antigravity（`agy -p`）の Gemini 4 Neon（決定9）。分析は安いモデル（GPT-6.2 Sol、足りるならさらに安い Luna など。決定10）。Orca の会話のログは、どちらのモデルに渡す前にも秘密情報らしい文字列を機械で伏せる（決定14）。エージェント（Claude Code・Codex・Orca の作業者）は `agy` を呼ばない（同じ文書の末尾）。
-- 呼ぶ側は出来事や話題をJSONにして渡す（epic-00004 の D-02・D-03）。伏せる処理は、1行のJSONや、JSONの文字列の中に入れ子になったJSON（引用符が `\\"` になる）でも当たる必要がある。
+- 呼ぶ側は出来事や話題をJSONにして渡す（epic-00004 の D-02・D-03）。`json.dumps` で書き出したJSONは、日本語を `\\uXXXX` に、引用符を `\\"` に、改行を `\\n` にするので、文に規則を当てるだけでは秘密の手掛かりが隠れる。そこで、伏せる処理は、全体がJSONとして読める文字列を、構造をたどって文字列の値ごとに伏せる（design.cue の D-01）。呼ぶ側（iss-00015・iss-00016）は、JSONを渡すとき、prompt の全体を1つのJSONの物か配列にし、指示は system に書く。
 """
 
 includes: [
@@ -55,9 +55,9 @@ requirements: {
 		text:  "伏せる処理は、経路の個々の実装ではなく、共通の入口 `GuardedRoute.complete` で行い、経路の実装が飛ばせないようにする。規則は design.cue の D-01 の表（RD-01〜RD-11）。置き換えた後の文字列は `[伏せた]`。"
 		acceptance: [
 			"`fake`（`responder` を含む）・`codex`・`claude`・`antigravity` の全経路で、経路の実装に届くプロンプトとsystemの文字列（runner の argv と標準入力、`responder` の引数）が、伏せた後のものになっている",
-			"GitHub のトークン（`ghp_`・`gho_`・`ghu_`・`ghs_`・`ghr_`・`github_pat_`）、`sk-`、`AKIA`・`ASIA`、Slack のトークン（`xox[abposr]-`）、`AIza` の Google の鍵、JWT、`Bearer` の後の値、URLの中の利用者:パスワード、`-----BEGIN ... PRIVATE KEY-----` の塊（同じ種類の閉じの行まで。なければ末尾まで）、`PASSWORD`・`TOKEN`・`SECRET` などを名前に含む鍵の `=` か `:` の後の値が、D-01 の表のとおり `[伏せた]` になる",
+			"GitHub のトークン（`ghp_`・`gho_`・`ghu_`・`ghs_`・`ghr_`・`github_pat_`）、`sk-`、`AKIA`・`ASIA`、Slack のトークン（`xox[abposr]-`）、`AIza` の Google の鍵、JWT、`Bearer` の後の値、URLの中の利用者:パスワード、`-----BEGIN ... PRIVATE KEY-----` の塊（同じ種類の閉じの行まで。なければ末尾まで）、`PASSWORD`・`TOKEN`・`SECRET` などを名前に含む鍵の `=` か `:` の後の値（引用のない値は `}`・`]` を含んでも行の末尾まで）が、D-01 の表のとおり `[伏せた]` になる",
+			"全体がJSONの物か配列として読める文字列は、構造をたどって伏せる。秘密の名前の鍵の値は型によらず `\"[伏せた]\"` になり、ほかの鍵と値は残り、結果もJSONとして読める。`json.dumps` の既定（日本語の `\\uXXXX`）で書き出したJSONの中のトークン、JSONの文字列の中に入れたJSON（値に引用符を含むパスワードを含む）の値、JSONの文字列の中の改行の後ろの文も、それぞれ伏せる・残す",
 			"日本語の文字のすぐ隣にあるトークン（例「トークン」の直後）も伏せる",
-			"1行のJSON（`json.dumps` の既定）では、秘密の名前の鍵の値だけを伏せ、後ろのほかの鍵と値は残す。JSONの文字列の中に入れ子になったJSON（`\\\"password\\\": \\\"…\\\"`）の値も伏せる",
 			"秘密を含まない文（日本語の文、RD-04 の鍵の名前を含まないコードやログ）は変わらない。伏せた文字列をもう一度 `redact()` に通しても変わらない",
 		]
 	}
@@ -95,9 +95,9 @@ failures: {
 	}
 	"F-05": {
 		title:    "経路のCLIの道具が手元のファイルを読み、伏せる処理を通らずにモデルへ渡す"
-		text:     "`codex` と `agy` はエージェントのCLIで、道具（コマンド、ファイルの読み取り、Webの取得）を持つ。出来事の中の指示（プロンプトの注入）などで道具が手元のファイルを読むと、その中身は `redact()` を通らずにモデルの提供元へ渡る。この Issue は、経路ごとに引数で道具を止めるか狭める（D-03）。`claude` は `--tools \"\"` で道具を持たない。`codex` は、手元を読む道具（`shell_tool`・`unified_exec`・`view_image`・`plugins`）を外し、利用者の設定（MCP）を読まず、read-only の sandbox と空の作業ディレクトリで動かす。`agy` は、1回の実行だけ道具を止める方法が公式の文書になく、`plan` のモードと `--sandbox` と空の作業ディレクトリで狭めるだけで、利用者の Antigravity の設定によってはファイルを読める。この残る危険は受け入れて記録する（decisions の Q-01 の判断）。"
+		text:     "`codex` と `agy` はエージェントのCLIで、道具（コマンド、ファイルの読み取り、Webの取得）を持つ。出来事の中の指示（プロンプトの注入）などで道具が手元のファイルを読むと、その中身は `redact()` を通らずにモデルの提供元へ渡る。この Issue は、経路ごとに引数で道具を止めるか狭める（D-03）。`claude` は `--tools \"\"` で道具を持たない。`codex` は、手元を読む道具（`shell_tool`・`unified_exec`・`view_image`・`plugins`）を外し、利用者の設定（MCP）を読まず、read-only の sandbox と空の作業ディレクトリで動かす。`agy` は、1回の実行だけ道具を止める方法が公式の文書になく、`plan` のモードと `--sandbox` と空の作業ディレクトリで狭めるだけで、利用者の Antigravity の設定によってはファイルを読める。この残る危険は、本人が受け入れた（decisions の Q-01）。"
 		impact:   "秘密や非公開の文書の中身が、伏せられずに外部のモデルへ渡り、取り消せない"
-		recovery: "引数で道具を止め（codex・claude）、狭める（agy）。`agy` の残る危険は、本人が自分の Antigravity の設定で道具を絞れば小さくなる（questions）。漏れた疑いがあれば、その秘密を作り直す"
+		recovery: "引数で道具を止め（codex・claude）、狭める（agy）。`agy` の残る危険は本人が受け入れた（decisions の Q-01）。本人が自分の Antigravity の設定で道具を絞れば小さくなる。漏れた疑いがあれば、その秘密を作り直す"
 	}
 }
 
@@ -106,10 +106,10 @@ decisions: [
 	"エージェントの印は epic-00004 の F-03 の4つ（`CODEX_` は前方一致）に限る。`CODEX_HOME` などを利用者が普段の環境に置くと、antigravity の経路は止まる。閉じる側に倒すため、これを受け入れる（タスク担当の判断、2026-11-26）",
 	"`agy` の引数は、Antigravity の公式の文書（https://antigravity.google/docs/cli/headless/ 、https://antigravity.google/docs/cli/reference/ 、https://antigravity.google/docs/cli/modes/ 、https://antigravity.google/docs/sandbox/ 、2026-11-26 に読んだ）に従う。`agy` は起動して確かめない（AGENTS.md、本人の決定）",
 	"`codex` の道具の外し方は、モデルを呼ばない `codex debug prompt-input -c features.<名前>=false` で、モデルに見える道具の一覧から消えることを確かめた（2026-11-26、codex-cli 0.172.0）。4つを外すと、残る道具は `apply_patch`（read-only の sandbox で書けない）、MCPの資源の道具（利用者の設定を読まないので空）、時計だけになる",
-	"Q-01（`agy -p` の道具の残る危険）の判断：選択肢は (1) 引数で狭めた形（`plan`・`--sandbox`・空の作業ディレクトリ）で受け入れて記録する、(2) shipcast が利用者の Antigravity の設定を読み、道具を禁じる規則がなければ止める（利用者が全体の設定を改める必要がある）、(3) 道具を止められるまで書き手の既定を `claude` にする（決定9の変更）。(1) を選ぶ。決定9と利用者の設定を変えずに済み、この Issue の範囲に収まるため。統括に問うたが、答えないまま止まり「自分で決めて報告する」と返された（タスク担当の判断、2026-11-26。本人の了承ではない。マージの前に本人が確かめる）",
+	"Q-01（`agy -p` の道具の残る危険）の判断：選択肢は (1) 引数で狭めた形（`--mode plan`・`--sandbox`・空の作業ディレクトリ）で受け入れて記録する、(2) shipcast が利用者の Antigravity の設定を読み、道具を禁じる規則がなければ止める、(3) 道具を止められるまで書き手の既定を `claude` にする（決定9の変更）。**本人が (1) を採用した**（2026-11-26、統括を通じた本人の了承。「agy は --mode plan・--sandbox・空の作業ディレクトリで狭めた形で実装し、agy -p に1回限りのツール完全無効化フラグがないことによる残存リスクは仕様 F-05 に本人の受容として記録する」）。この受け入れは、epic-00004 の D-01 の antigravity の「道具の禁止」と決定14の「渡す前に伏せる」を、`agy` の道具が自分で読むものについてだけ緩める（shipcast が渡す文字列は、すべて伏せる）",
 ]
 
 questions: [
-	"Q-01 の (1) の受け入れを、本人がマージの前に確かめる（strict のため、統括が本人に確かめてからマージする）。本人が (2) か (3) を選べば、F-05 と D-03 を直す",
 	"Antigravity の CLI が、自分の道具で実行するコマンドに付ける環境変数（エージェントの中の印）は、文書にない。見つかったら印に足す（2026-12-19 の規約の読み直しのとき。design.cue の risks）",
+	"Antigravity の CLI に1回の実行だけ道具を止める方法が出たら、F-05 の受け入れを見直し、D-03 の引数に足す",
 ]
