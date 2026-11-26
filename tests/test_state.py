@@ -138,6 +138,69 @@ def test_save_stories_rolls_back_failed_batch(tmp_path):
         assert store.stories_for("demo-app", DAY) == []
 
 
+def test_save_stories_credits_initial_points_once_per_repo(tmp_path):
+    first = Story("s1", "demo-app", DAY, "変更A", "内容", "理由", Neta(2))
+    second = replace(first, id="s2", title="変更B", neta=Neta(1))
+    other = replace(first, id="s3", repo_id="demo-lib", neta=Neta(3))
+    zero = replace(first, id="s4", neta=Neta(0))
+    updated = replace(second, title="変更Bの補足", neta=Neta(3))
+
+    with Store(tmp_path) as store:
+        assert store.save_stories(iter([first, second, other])) == 3
+        assert store.neta_balance("demo-app") == 3
+        assert store.neta_balance("demo-lib") == 3
+        assert store.save_stories([updated, zero]) == 2
+        assert store.stories_for("demo-app", DAY) == [first, updated, zero]
+        assert store.neta_balance("demo-app") == 3
+        assert store.unconsumed_neta("demo-app") == ["s1", "s2", "s4"]
+        assert store.consume_neta(["s1"]) == 1
+        assert store.save_stories([first]) == 1
+        assert store.neta_balance("demo-app") == 1
+        assert store.unconsumed_neta("demo-app") == ["s2", "s4"]
+
+
+def test_save_stories_rolls_back_both_tables_when_ledger_write_fails(tmp_path):
+    first = Story("s1", "demo-app", DAY, "変更A", "内容", "理由", Neta(2))
+    second = replace(first, id="s2", title="変更B")
+
+    with Store(tmp_path) as store:
+        with closing(sqlite3.connect(store.path)) as conn:
+            conn.execute("""
+                CREATE TRIGGER reject_second_credit BEFORE INSERT ON neta_ledger
+                WHEN NEW.story_id = 's2'
+                BEGIN
+                    SELECT RAISE(ABORT, 'interrupted ledger write');
+                END
+                """)
+        with pytest.raises(sqlite3.IntegrityError, match="interrupted ledger write"):
+            store.save_stories([first, second])
+        assert store.stories_for("demo-app", DAY) == []
+        assert store.unconsumed_neta("demo-app") == []
+
+
+def test_unconsumed_stories_uses_ledger_points_and_insertion_order(tmp_path):
+    first = Story("s-z", "demo-app", DAY, "変更A", "内容", "理由", Neta(2))
+    tie = replace(first, id="s-a", title="変更B")
+    lower = replace(first, id="s-low", neta=Neta(1))
+    updated = replace(lower, neta=Neta(3))
+    consumed = replace(first, id="s-consumed", neta=Neta(3))
+    zero = replace(first, id="s-zero", neta=Neta(0))
+    other = replace(first, id="s-other", repo_id="demo-lib", neta=Neta(3))
+    orphan = replace(first, id="s-orphan", neta=Neta(3))
+
+    with Store(tmp_path) as store:
+        store.add_neta(orphan)
+        store.save_stories([lower, first, tie, consumed, zero, other])
+        store.save_stories([updated])
+        store.consume_neta([consumed.id])
+
+        assert store.unconsumed_stories("demo-app") == [first, tie, updated]
+        assert store.unconsumed_stories("demo-app", limit=1) == [first]
+        assert store.unconsumed_stories("demo-app", limit=0) == [first, tie, updated]
+        assert store.unconsumed_stories("demo-app", limit=10**20) == [first, tie, updated]
+        assert store.unconsumed_stories("demo-lib") == [other]
+
+
 def test_runs_round_trip_and_sort_by_start_instant_then_id(tmp_path):
     start = datetime(2026, 11, 26, 11, tzinfo=JST)
     later = Run("demo-app", start, start + timedelta(minutes=10), "ok")

@@ -327,7 +327,10 @@ def test_analyze_persists_events_before_request_and_stories_before_return(
     assert store.stories_for(REPO, DAY) == stories
     assert store.events_for(REPO, DAY, tz=UTC) == events
     assert store.runs_for(REPO) == []
-    assert store.unconsumed_neta(REPO) == []
+    assert store.unconsumed_neta(REPO) == [stories[1].id, stories[0].id]
+    assert store.neta_balance(REPO) == 2
+    assert analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY) == stories
+    assert store.neta_balance(REPO) == 2
 
 
 def reject_call(*args):
