@@ -27,6 +27,7 @@ iss-00011 からの申し送り：`Collector.collect` の引数は、epic-00003 
 includes: [
 	"`src/shipcast/collect/orca.py`：`OrcaCollector`",
 	"`src/shipcast/collect/__init__.py`：`COLLECTORS` に `OrcaCollector()` を3番目に足す（1行と import の1行）",
+	"既存の試験の2か所：`tests/test_collect_git.py` の `write_config` が各repositoryに `orca = false` を書く（別のプロセスの `shipcast collect` が本物の `orca` を呼ばないため）。`tests/test_collect_specdock.py` の登録の順の試験を `[\"git\", \"specdock\", \"orca\"]` にする",
 	"`tests/test_collect_orca.py` と、`tests/fixtures/orca/` の見本（架空の値のJSON）",
 ]
 
@@ -36,16 +37,16 @@ excludes: [
 	"1つの会話の、最新の100件より前の記録（`orca agent read --limit` の上限）",
 	"日をまたぐ会話の、発言ごとの日の振り分け（発言に時刻がないため）。会話は最後に動いた日（`updatedAt`）にだけ入る",
 	"話題にまとめること、日誌を書くこと、公開の方針での絞り込み、外部のモデルの呼び出し（`agy`、`codex`、`claude` を一切呼ばない）",
-	"`shipcast.collect.base`・`shipcast.collect.command`・`shipcast.collect.git`・`shipcast.collect.specdock`・`shipcast.model`・`shipcast.config`・`shipcast.state`・`shipcast.cli` の変更",
+	"`shipcast.collect.base`・`shipcast.collect.command`・`shipcast.collect.git`・`shipcast.collect.specdock`・`shipcast.model`・`shipcast.config`・`shipcast.state`・`shipcast.cli` の変更。既存の試験は、includes の2か所のほか変えない",
 ]
 
 requirements: {
 	"R-01": {
 		title: "そのrepositoryのworktreeでの、その日に動いた会話（本人とエージェントの発言）を、Event（conversation）にする"
-		text:  "「そのrepositoryのworktree」は、Orcaの `worktreeId` のpathが `repo.path` かその配下のもの、または `worktreeId` の `<repo-id>` が、Orcaに `repo.path` のpathで登録されたrepositoryのIDのもの。「その日に動いた」は、会話の `updatedAt` が `day_bounds(day, tz)` の範囲にあること（発言に時刻がないため。epic-00003 の D-04）。"
+		text:  "「そのrepositoryのworktree」は、`worktreeId` の `<repo-id>` が、Orcaに `repo.path` のpathで登録されたrepositoryのIDのもの、または `worktreeId` のpathが `repo.path` かその配下で、`<repo-id>` がOrcaに別のpathで登録されたrepositoryのIDでないもの（入れ子の別のrepositoryを除くため）。「その日に動いた」は、会話の `updatedAt` が `day_bounds(day, tz)` の範囲にあること（発言に時刻がないため。epic-00003 の D-04）。"
 		acceptance: [
 			"そのrepositoryの（main checkoutと、ほかの場所のOrcaのworktreeの）会話で、`updatedAt` がその日のものが、1つの会話につき1件の、kind `conversation`、時刻 `updatedAt` のEventになる",
-			"前日・翌日の `updatedAt`（日の境のちょうどを含む）の会話、ほかのrepositoryの会話、folderのworkspaceの会話は入らない",
+			"前日・翌日の `updatedAt`（日の境のちょうどを含む）の会話、ほかのrepositoryの会話（`repo.path` の配下に入れ子に置かれた、Orcaに別に登録したrepositoryを含む）、folderのworkspaceの会話は入らない",
 			"Eventの本文に、`role` が `user` と `assistant` の発言が古い順に入り、道具の呼び出し（`kind` が `tool`）と `system` の発言は入らない",
 			"Eventに、会話の題名、OrcaのセッションID、エージェントの種類、workspaceの名前が入る",
 			"同じ会話が別の日にも動いたとき、日ごとに別のEventになる（同じIDで二度目が捨てられない）",
@@ -78,5 +79,6 @@ decisions: [
 	"epic-00003 の D-04 の2つのコマンドに、`orca repo list --json` を足す。Orcaのworktreeは登録したpathの外にあり、`worktreeId` のpathだけでは同じrepositoryと分からないため。読むだけのコマンドで、読めなければ警告にしてpathだけで選ぶ（タスク担当の判断、2026-11-26。本人の決定 6「細部の設計はエージェントが詰める」の範囲）",
 	"Eventの native_id に日を入れる（`conversation:{orcaSessionId}:{day}`）。保存は同じIDを捨てるので、日を入れないと、前の日に集めた会話がその後に動いても、次の日に入らないため（タスク担当の判断、同じ範囲）",
 	"`system` の発言（Orcaやエージェントの道具の知らせ）は入れない。R-01 の「本人とエージェントの発言」に当たらないため（タスク担当の判断、同じ範囲）",
+	"既存の試験 `tests/test_collect_git.py` は別のプロセスで `shipcast collect` を動かし、`orca` を書かない設定は既定の `orca = true` になるので、その設定に `orca = false` を書く。試験で本物の `orca` を呼ばない約束を、登録した後も保つため（仕様のレビューの1回目の P1、タスク担当の判断、2026-11-26）",
 	"作業のbranchは統括が作ったworktreeの `chemitaro/iss-00013` を使う",
 ]
