@@ -10,6 +10,7 @@ tests: {
 	"T-01": {title: "fake の応答から話題ができる", verifies: ["R-01"]}
 	"T-02": {title: "1回目が壊れたJSONなら頼み直す", verifies: ["R-02"]}
 	"T-03": {title: "2回とも壊れたら失敗として記録する", verifies: ["F-01"]}
+	"T-04": {title: "返る前に話題が状態に保存されている", verifies: ["R-03"]}
 }
 
 execution: sessions: {

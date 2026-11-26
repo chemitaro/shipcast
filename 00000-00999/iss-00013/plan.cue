@@ -1,13 +1,14 @@
 package spec
 
 steps: {
-	"S-01": {title: "Orca CLIで会話を読む方法を確かめ、出力の見本を置く", realizes: ["R-01"], session: "impl"}
+	"S-01": {title: "`orca agent list --json` と `orca agent read --json` の出力を確かめ、架空の値の見本を置く", realizes: ["R-01"], session: "impl"}
 	"S-02": {title: "Orcaのcollector", realizes: ["R-01", "R-02", "F-01"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
-	"T-01": {title: "見本の出力から、会話がEventになる", verifies: ["R-01"]}
+	"T-01": {title: "見本の出力から、その日の会話の発言だけがEventになる", verifies: ["R-01"]}
 	"T-02": {title: "orcaのCLIがないとき、警告だけで空を返す", verifies: ["F-01"]}
+	"T-03": {title: "`orca = false` のrepositoryでは、orcaを呼ばない", verifies: ["R-02"]}
 }
 
 execution: sessions: {
