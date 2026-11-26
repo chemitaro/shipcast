@@ -1,0 +1,87 @@
+{
+  "schema_version": "specdock.cli/v2",
+  "status": "succeeded",
+  "data": {
+    "result": {
+      "items": [
+        {
+          "id": "iss-00101",
+          "kind": "issue",
+          "title": "設計見本を追加",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#101",
+          "number": 101,
+          "url": "https://github.com/example-org/demo-app/issues/101",
+          "state_reason": "completed"
+        },
+        {
+          "id": "iss-00102",
+          "kind": "issue",
+          "title": "図の色を調整",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#102",
+          "number": 102,
+          "url": null,
+          "state_reason": null
+        },
+        {
+          "id": "iss-00103",
+          "kind": "issue",
+          "title": "前日の見本",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#103",
+          "number": 103,
+          "url": "https://github.com/example-org/demo-app/issues/103",
+          "state_reason": null
+        },
+        {
+          "id": "iss-00104",
+          "kind": "issue",
+          "title": "翌日の見本",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#104",
+          "number": 104,
+          "url": "https://github.com/example-org/demo-app/issues/104",
+          "state_reason": null
+        },
+        {
+          "id": "iss-00105",
+          "kind": "issue",
+          "title": "番号のない見本",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#105",
+          "url": "https://github.com/example-org/demo-app/issues/105",
+          "state_reason": null
+        },
+        {
+          "id": "iss-00106",
+          "kind": "issue",
+          "title": "ローカルの見本",
+          "parent_id": "epic-00100",
+          "backend": "local",
+          "github_ref": null,
+          "number": 106,
+          "url": null,
+          "state_reason": null
+        },
+        {
+          "id": "iss-00107",
+          "kind": "issue",
+          "title": "再開した見本",
+          "parent_id": "epic-00100",
+          "backend": "github",
+          "github_ref": "gh:example-org/demo-app#107",
+          "number": 107,
+          "url": "https://github.com/example-org/demo-app/issues/107",
+          "state_reason": null
+        }
+      ]
+    }
+  },
+  "error": null
+}

@@ -1,0 +1,21 @@
+{
+  "id": "fixture-repo-list",
+  "ok": true,
+  "result": {
+    "repos": [
+      {
+        "id": "00000000-0000-4000-8000-000000000101",
+        "path": "/home/dev/demo-app/."
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000102",
+        "path": "/home/dev/other-app"
+      },
+      {
+        "id": "00000000-0000-4000-8000-000000000103",
+        "path": "/home/dev/demo-app/vendor/lib"
+      }
+    ]
+  },
+  "_meta": {}
+}

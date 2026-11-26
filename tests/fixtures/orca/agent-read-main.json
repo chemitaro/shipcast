@@ -1,0 +1,40 @@
+{
+  "id": "fixture-agent-read-main",
+  "ok": true,
+  "result": {
+    "limited": true,
+    "entries": [
+      {
+        "kind": "message",
+        "role": "user",
+        "text": "  Try a blue lamp.  "
+      },
+      {
+        "kind": "tool",
+        "role": "assistant",
+        "text": "Sample tool output"
+      },
+      {
+        "kind": "message",
+        "role": "system",
+        "text": "Sample startup message"
+      },
+      {
+        "kind": "message",
+        "role": "assistant",
+        "text": "The blue lamp is ready.\nThe switch works."
+      },
+      {
+        "kind": "message",
+        "role": "user",
+        "text": " \n\t "
+      },
+      {
+        "kind": "message",
+        "role": "user",
+        "text": "Record the result."
+      }
+    ]
+  },
+  "_meta": {}
+}

@@ -1,0 +1,15 @@
+{
+  "id": "fixture-agent-read-worktree",
+  "ok": true,
+  "result": {
+    "limited": false,
+    "entries": [
+      {
+        "kind": "message",
+        "role": "assistant",
+        "text": "The dial turns smoothly."
+      }
+    ]
+  },
+  "_meta": {}
+}

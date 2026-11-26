@@ -1,0 +1,15 @@
+{
+  "id": "fixture-agent-read-empty",
+  "ok": true,
+  "result": {
+    "limited": false,
+    "entries": [
+      {
+        "kind": "message",
+        "role": "system",
+        "text": "Waiting for input."
+      }
+    ]
+  },
+  "_meta": {}
+}

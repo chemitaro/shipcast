@@ -1,0 +1,109 @@
+{
+  "id": "fixture-agent-list",
+  "ok": true,
+  "result": {
+    "agents": [
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000001",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/demo-app",
+        "workspace": "demo workspace",
+        "title": "  Lamp color experiment  ",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000002",
+        "kind": "terminal",
+        "agent": "claude",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/worktrees/demo-app/feature-x",
+        "workspace": "feature-x",
+        "title": "",
+        "updatedAt": 1795705199999
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000003",
+        "kind": null,
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000104::/home/dev/demo-app/sandbox/../preview",
+        "workspace": "",
+        "title": "Paper preview",
+        "updatedAt": 1795705199999
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000004",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/demo-app",
+        "workspace": "demo workspace",
+        "title": "Empty conversation",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000005",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/demo-app",
+        "workspace": "demo workspace",
+        "title": "Yesterday",
+        "updatedAt": 1795618799999
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000006",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/demo-app",
+        "workspace": "demo workspace",
+        "title": "Tomorrow",
+        "updatedAt": 1795705200000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000007",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000102::/home/dev/other-app",
+        "workspace": "demo workspace",
+        "title": "Other checkout",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000008",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "folder:demo-folder",
+        "workspace": "demo workspace",
+        "title": "Loose notes",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000009",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000104::/home/dev/demo-app-old",
+        "workspace": "demo workspace",
+        "title": "Old checkout",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000010",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000103::/home/dev/demo-app/vendor/lib",
+        "workspace": "demo workspace",
+        "title": "Nested checkout",
+        "updatedAt": 1795618800000
+      },
+      {
+        "orcaSessionId": "00000000-0000-4000-8000-000000000001",
+        "kind": "chat",
+        "agent": "codex",
+        "worktreeId": "00000000-0000-4000-8000-000000000101::/home/dev/demo-app",
+        "workspace": "demo workspace",
+        "title": "Duplicate title",
+        "updatedAt": 1795705199999
+      }
+    ],
+    "truncated": false
+  },
+  "_meta": {}
+}

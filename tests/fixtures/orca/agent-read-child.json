@@ -1,0 +1,15 @@
+{
+  "id": "fixture-agent-read-child",
+  "ok": true,
+  "result": {
+    "limited": false,
+    "entries": [
+      {
+        "kind": "message",
+        "role": "user",
+        "text": "Open the paper preview."
+      }
+    ]
+  },
+  "_meta": {}
+}
