@@ -134,3 +134,15 @@ def test_ci_runs_local_checks_for_pull_requests_and_main_pushes():
     assert "\npermissions:\n  contents: read\n" in workflow
     checks = ("uv sync --locked", "uv run ruff check", "uv run pytest -q")
     assert "".join(f"      - run: {check}\n" for check in checks) in workflow
+
+
+def test_agents_md_lists_checks_in_order_and_forbids_agy():
+    root = Path(__file__).resolve().parents[1]
+    agents = (root / "AGENTS.md").read_text(encoding="utf-8")
+
+    checks = ("uv sync --locked", "uv run ruff check", "uv run pytest -q")
+    positions = [agents.find(f"`{check}`") for check in checks]
+    assert all(position >= 0 for position in positions)
+    assert positions == sorted(positions)
+    assert "`fake`" in agents
+    assert "`agy`を呼ばない" in agents
