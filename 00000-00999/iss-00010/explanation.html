@@ -10,23 +10,317 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00010 データの約束と状態の置き場
-lead: Event・Story・Entryの型と、SQLiteの状態の置き場を作ります。ほかのIssueはここを読み込みます。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
+lead: 出来事・話題・日誌の「型」と、日誌のファイルの「パスと前付け」と、手元のSQLiteの「状態の置き場」を1か所に作ります。後の全Issueは、名前や形を自分で決めず、ここを読み込むだけで並行に作業できます。
+category: 説明資料（Issue・standard）
+audience: このIssueのタスク担当・実装担当、後のIssue（収集・分析・執筆・配信・おまけ・夜の実行）の担当、統括、ハッカソンの見学者
 status: 仕様を確定
+updated: 2026-11-26
+docid: iss-00010
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-Event・Story・Entryの型と、SQLiteの状態の置き場を作ります。ほかのIssueはここを読み込みます。親のE1の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 型はJSONと行き来できる
-- 同じ出来事を二度保存しても1件のまま
+:::summary
+- なぜ「データの約束」を、中身の処理より先に1か所へ入れるのか
+- 出来事（Event）・話題（Story）・日誌（Entry）の型と、そのJSONの形
+- 同じ日を何度集め直しても増えない（冪等）しくみ：安定したIDとSQLiteの表
+- 日誌のMarkdownのパスと前付け（全Epicの共通の契約）
+- 壊れた入力を受けたときの止まり方と、試験・関門・担当
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`standard`** です。Event・Story・Entryの型とSQLiteの表は全Epicが読むデータの約束なので、受け入れ条件と試験を全要件に付けました。日誌のパスと前付けの契約（epic-00002 の D-05）も、ここで `shipcast.model` の関数にします。
+## なぜ先に約束を入れるのか
+
+shipcastは、毎晩その日の開発の出来事を集め、話題にまとめ、読み物の日誌に書き、Webページで見せます。この4つの段は、ハッカソンでは **別々の作業者が同時に** 作ります。もし段ごとに「出来事の時刻の名前は `at` か `time` か」「日誌のファイルはどこに置くか」を決めると、つなぐときに食い違います。
+
+このIssueは、全員が読み込む **型・表・日誌の契約だけ** を、動いて試験の通る形で先にmainへ入れます。実際に集める・まとめる・書く処理は、後のIssueが作ります。
+
+```plantuml id=uses
+@startuml
+title iss-00010 の約束を、後のIssueが読み込む
+left to right direction
+package "iss-00010（このIssue）" {
+  [shipcast.model\nEvent・Story・Entry\n日誌のパスと前付け] as MODEL
+  [shipcast.state\nStore（SQLite）] as STATE
+}
+[iss-00011〜13\n収集] as COL
+[iss-00015\n分析] as ANA
+[iss-00016\n執筆] as WRI
+[iss-00017・18\n配信・一覧] as SRV
+[iss-00019・20\nネタポイント・X下書き] as NETA
+[iss-00021\n夜の実行] as RUN
+COL --> STATE : add_events
+ANA --> STATE : events_for / save_stories
+WRI --> MODEL : journal_path / write_frontmatter
+WRI --> STATE : save_entry
+SRV --> MODEL : read_frontmatter
+NETA --> STATE : add_neta / neta_balance
+RUN --> STATE : record_run
+@enduml
+```
+
+:::note 親の約束と保証レベル
+親の E1（epic-00002）の R-03（型）・R-04（状態）・R-05（日誌の契約）を、このIssueが受け持ちます。保証レベルは **standard** です。ここで決めた名前と形は後の全Issueに波及しますが、状態は利用者の手元のSQLiteだけで、消して集め直せば回復できるからです。
+:::
+
+## 作るファイル
+
+:::tree
+src/shipcast/model.py      # + 型・ID・JSON・日誌のパスと前付け
+src/shipcast/state.py      # + Store と5つの表
+tests/test_model.py        # + T-01〜T-04
+tests/test_journal.py      # + T-11〜T-13
+tests/test_state.py        # + T-05〜T-10
+:::
+
+並行に進む iss-00009（設定と `repo add|list`）とぶつからないよう、`pyproject.toml`・`uv.lock`・`cli.py` には触れません。実行時の依存も足しません（標準のライブラリだけ）。
+
+## 3つの型
+
+```plantuml id=types
+@startuml
+title shipcast.model の型（どれも frozen な dataclass）
+hide empty methods
+class Event {
+  id : str  <<event_id>>
+  repo_id : str
+  source : git | specdock | orca
+  kind : str
+  at : datetime（時差付き）
+  title : str
+  body : str = ""
+  refs : tuple[str]
+  actor : str = ""
+}
+class Story {
+  id : str  <<story_id>>
+  repo_id : str
+  date : date
+  title / what / why : str
+  notice : tuple[str]
+  waiting : tuple[str]
+  event_ids : tuple[str]
+}
+class Neta {
+  score : int（0〜3）
+  reason : str
+  channels : tuple[str]
+}
+class Entry {
+  repo_id : str
+  date : date
+  path : str
+  analyst / writer : str
+  generated_at : datetime
+  story_ids : tuple[str]
+}
+Story *-- Neta : neta
+Story --> "0..*" Event : event_ids
+Entry --> "0..*" Story : story_ids
+@enduml
+```
+
+:::datatable 型の役割
+| 型 | 何を表すか | 作る段 | 読む段 |
+|---|---|---|---|
+| Event | 1つの出来事（コミット、マージ、Scopeの開閉、todo、会話） | 収集（iss-00011〜13） | 分析 |
+| Story | 関係する出来事をまとめた話題。何が・なぜ・知っておくべきこと・待っていること・ネタポイント | 分析（iss-00015） | 執筆、おまけ |
+| Entry | ある日・あるrepositoryの日誌のファイルの記録 | 執筆（iss-00016） | 夜の実行、配信 |
+:::
+
+どの型も `to_json()`・`from_json()`（文字列）と `to_dict()`・`from_dict()`（辞書）を持ち、JSONの最上位には必ず `"schema": 1` が入ります。
+
+```json title="Event のJSON（架空の値）"
+{"schema": 1, "id": "3f2a9c0d1e4b5a67", "repo_id": "demo-app", "source": "git", "kind": "commit",
+ "at": "2026-11-26T10:15:00+09:00", "title": "架空の変更", "body": "", "refs": ["0123abcd"], "actor": "taro"}
+```
+
+## 増えない保存（冪等）
+
+夜の実行は、失敗したら同じ日をもう一度流します。手動でも何度でも流せます。そのたびに出来事やネタポイントが倍になっては困るので、**IDを中身から決め**、**同じIDは二度入れない** ようにします。
+
+:::steps
+1. 出来事のIDは `event_id(source, repo_id, native_id)` で決まります。出所・repository・元のID（コミットのSHAなど）を区切り文字でつないだ sha256 の先頭16桁です。
+2. 話題のIDは `story_id(repo_id, day, event_ids)` で決まります。まとめた出来事のIDの集まり（順と重複は無視）から作るので、同じまとまりなら同じIDです。
+3. `add_events` は `INSERT OR IGNORE` で入れ、新しく入った件数を返します。二度目は0です。
+4. `save_stories`・`save_entry` は同じIDなら上書き（後の内容）、`add_neta` は同じ話題なら何もしません。
+:::
+
+```plantuml id=idem
+@startuml
+title 同じ日を2回集めても、件数は増えない
+participant "collect\n（1回目）" as C1
+participant "collect\n（2回目）" as C2
+database "state.sqlite3\nevents" as DB
+C1 -> DB : add_events([e1, e2])
+DB --> C1 : 2（新しく入った件数）
+C2 -> DB : add_events([e1, e2])
+note right of DB : id が同じなので\nINSERT OR IGNORE で無視
+DB --> C2 : 0
+@enduml
+```
+
+## 状態の置き場（SQLite）
+
+状態は、repositoryの外の `state_dir`（既定は `~/.local/state/shipcast/`。場所は設定の iss-00009 が決めます）の `state.sqlite3` に置きます。`Store(state_dir)` で開くと、なければフォルダーと5つの表を作ります。
+
+```plantuml id=tables
+@startuml
+title state.sqlite3 の5つの表（版1）
+hide circle
+entity events {
+  * id : TEXT <<PK>>
+  repo_id / source / kind
+  at（元の時差） / at_utc（並べ替え用）
+  json
+}
+entity stories {
+  * id : TEXT <<PK>>
+  repo_id / date
+  json
+}
+entity entries {
+  * repo_id + date <<PK>>
+  path
+  json
+}
+entity runs {
+  * id : INTEGER <<PK>>
+  repo_id
+  started_at / finished_at
+  result（ok | failed） / error
+}
+entity neta_ledger {
+  * story_id : TEXT <<PK>>
+  repo_id
+  points（0〜3）
+  consumed（0 | 1）
+}
+stories ..> events : json の event_ids
+neta_ledger ..> stories : story_id
+@enduml
+```
+
+:::keyvalue Store の主な関数
+- `add_events(events)` : 出来事を入れる。戻り値は新しく入った件数
+- `events_for(repo_id, day, tz=...)` : その日（`tz` の0時〜翌0時の前）の出来事を時刻の順に
+- `save_stories(stories)` / `stories_for(repo_id, day)` : 話題を保存・読み出し（保存した順）
+- `save_entry(entry)` / `entry_for(repo_id, day)` : 日誌の記録。ない日は `None`
+- `record_run(run)` / `runs_for(repo_id)` : 夜の実行の開始・終了・結果・誤り
+- `add_neta(story)` / `neta_balance(repo_id)` / `consume_neta(ids)` : ネタポイントの台帳
+:::
+
+:::tip 日の区切りは呼ぶ側が決める
+`events_for` の `tz` には既定値がありません。日本時間の23:30の出来事は「その日」に、0:10の出来事は「翌日」に入れたいので、区切りの時差を呼ぶ側（設定の `timezone`）に必ず渡させます。表にはUTCに直した時刻も入れ、時差の違う出来事も正しい順に並べます。
+:::
+
+## 日誌のパスと前付け
+
+日誌は、書く段（iss-00016）が作り、描く段（iss-00017・18）とおまけが読みます。両者をつなぐ契約がここです。
+
+:::terminal title="パスの約束"
+$ python -c 'from datetime import date; from shipcast.model import journal_path; print(journal_path("/j", "shipcast", date(2026, 11, 26)))'
+/j/shipcast/2026/2026-11-26.md
+:::
+
+```markdown title="日誌のファイルの先頭（前付け）"
+---
+title: shipcast の開発日誌 2026-11-26
+lead: 型と状態の置き場が入り、後のIssueが並行に始められるようになりました。
+date: 2026-11-26
+repo: shipcast
+category: 開発日誌
+analyst: fake/fake
+writer: fake/fake
+generated_at: 2026-11-27T03:00:00+09:00
+schema: 1
+---
+（ここから本文）
+```
+
+前付けは、1行に `key: value` だけの平らな形です。YAMLのライブラリは使いません。`title`・`lead`・`date`・`repo` が必須で、読む側（表紙・一覧）はこの4つだけに頼ります。知らない項目は読むときに捨てるので、後で項目を足しても古い読む側は壊れません。
+
+## 壊れた入力での止まり方
+
+:::datatable 失敗の条件
+| ID | 起きること | 止まり方 |
+|---|---|---|
+| F-01 | 型の値が約束に合わない（必須がない、`schema` が1でない、`at` に時差がない、`neta.score` が0〜3でない など） | `ModelError`。文に `Event.at` のような項目の名前 |
+| F-02 | 前付けが壊れている（`---` がない、`key: value` でない行、同じ項目が2回、`date` が読めない など） | `JournalFormatError`。行の番号か項目の名前。必須の欠けは全部まとめて名指す |
+| F-03 | 置き場が新しい版、またはSQLiteでない | `StateError`。何も書かない。文にパス |
+| F-04 | repositoryのIDに `/` や `..` が入る | `ModelError`。日誌の置き場の外を指すパスを作らない |
+:::
+
+:::warning 誤りの文を、後のIssueがそのまま使う
+分析（iss-00015）は、モデルの応答の形が合わないとき、この `ModelError` の文をそのまま「前の応答の誤り」として頼み直しに添えます。そのため、誤りの文には必ず項目の名前を入れます。
+:::
+
+## 試験
+
+:::datatable 試験の一覧
+| ID | 確かめること | 要件 |
+|---|---|---|
+| T-01 | 3つの型をJSON・辞書にして戻すと元と等しい | R-01 |
+| T-02 | 鍵の順、`schema: 1`、日付と時刻の書き方 | R-01 |
+| T-03 | `event_id`・`story_id` が安定し、違う入力で違う | R-01、R-03 |
+| T-04 | 約束に合わない値が、項目を名指す `ModelError` | F-01 |
+| T-05 | `Store` がフォルダー・ファイル・5つの表・版1を作る | R-02 |
+| T-06 | `events_for` の日の範囲・順・時差 | R-02 |
+| T-07 | 話題・日誌・実行の保存と読み出し、開き直し | R-02 |
+| T-08 | ネタポイントの残高と消化 | R-02 |
+| T-09 | 二度保存しても1件（出来事・話題・日誌・ネタ） | R-03 |
+| T-10 | 新しい版・壊れたファイルで `StateError`、何も書かない | F-03 |
+| T-11 | `journal_path` の形と、悪いrepositoryのID | R-04、F-04 |
+| T-12 | 前付けを書いて読むと元に戻る | R-04 |
+| T-13 | 欠けた・壊れた前付けで `JournalFormatError` | R-04、F-02 |
+:::
+
+試験はすべて `tmp_path` の下だけで行い、架空の値（`demo-app`、`taro`）を使います。時差は `+09:00` を数で書き、OSの時差のデータに頼りません。
+
+## 仕様からマージまで
+
+```plantuml id=gates
+@startuml
+title iss-00010 の関門（standard）
+start
+:タスク担当が仕様と説明資料を書く;
+:仕様のレビュー\nspec-reviewer（Opus 5.5 / high）;
+note right: P0・P1がなくなるまで、3回まで
+:実装担当 Codex（GPT-6.2 Sol / medium）\nS-01 型 → S-02 日誌の契約 → S-03 状態;
+note right: 各手順は Red → Green
+:最終品質ゲート\nquality-gate-reviewer（Opus 5.5 / medium）＋全テスト;
+note right: 区切りのレビューはなし（理由は plan.cue の gates）
+:PRを作り、CIの合格を観測する;
+:統括に、PR・合格のコミット・CIの結果を報告する;
+:統括（Antigravity）がマージする;
+stop
+@enduml
+```
+
+:::raci
+| 作業 | 統括（Antigravity） | タスク担当（Opus 5.5） | 実装担当（Codex GPT-6.2 Sol） | spec-reviewer・quality-gate-reviewer |
+|---|---|---|---|---|
+| 仕様と説明資料 | I | A | I | C |
+| S-01 型・ID・JSON | I | C | A | I |
+| S-02 日誌のパスと前付け | I | C | A | I |
+| S-03 SQLiteの置き場 | I | C | A | I |
+| 最終品質ゲートとPR | I | A | C | C |
+| マージ | A | C | I | I |
+:::
+
+## 守ること
+
+:::danger 公開と外部への送信
+- repositoryはpublicです。試験の見本は架空の値だけにします
+- このIssueには外部のモデルの呼び出しがありません。`agy`・`codex`・`claude` を試験から呼びません
+- PRの本文に `Closes #10` などの自動で閉じる書き方を使いません（閉じるのはSpecDockの `work finish`）
+:::
+
+:::checklist このIssueの完了の確かめ
+- `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が通る
+- 3つの型がJSONと行き来し、同じものを二度保存しても1件のまま
+- `journal_path` と前付けの読み書きが契約どおり
+- 最終品質ゲートとPRのCIが合格している
+- 統括に報告し、統括がマージした
 :::
 
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
