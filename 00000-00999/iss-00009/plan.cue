@@ -11,7 +11,7 @@ steps: {
 		"""
 		realizes: ["R-01", "F-01", "F-02"]
 		session:  "impl"
-		status:   "todo"
+		status:   "done"
 	}
 	"S-02": {
 		title: "`add_repo` と `shipcast repo add`"
@@ -22,7 +22,7 @@ steps: {
 		realizes: ["R-02", "R-04", "F-01"]
 		after: ["S-01"]
 		session: "impl"
-		status:  "todo"
+		status:  "done"
 	}
 	"S-03": {
 		title: "`shipcast repo list`"
@@ -33,7 +33,7 @@ steps: {
 		realizes: ["R-03", "F-02"]
 		after: ["S-02"]
 		session: "impl"
-		status:  "todo"
+		status:  "done"
 	}
 }
 
