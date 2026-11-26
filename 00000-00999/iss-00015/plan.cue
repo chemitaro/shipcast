@@ -4,13 +4,14 @@ goal: "応答の形の検査とプロンプトを先に固め、その上に頼�
 
 steps: {
 	"S-01": {
-		status:   "doing"
+		status:   "done"
 		title:    "分析のプロンプトとJSONの形（`parse_stories`）"
 		text:     "D-02・D-04。T-01 の `parse_stories` の部分、T-05、T-07 を `tests/test_analyze.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/prompts/analyze.md` と、`src/shipcast/analyze.py` の `PROMPT_PATH`・プロンプトを読む関数・`parse_stories` を書いて通す（Green）。完了の条件：その試験が通り、`uv run ruff check` が通る。"
 		realizes: ["R-01", "R-02"]
 		session:  "impl"
 	}
 	"S-02": {
+		status:   "done"
 		title:    "`analyze` の関数と頼み直し、失敗（`AnalyzeFailed`）"
 		text:     "D-01（手順1・2・4・5・7と、手順6のうち `Story` の組み立て）・D-03。T-01（`analyze` の部分）、T-02、T-03、T-06、T-08 を先に書いて Red、`analyze`・`MAX_ATTEMPTS`・`AnalyzeFailed` を書いて Green。この手順では、話題の保存と出来事の保存の試験（T-04）はまだ書かない。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02", "F-01"]
@@ -18,6 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
+		status:   "done"
 		title:    "保存（出来事はモデルを呼ぶ前、話題は返す前）"
 		text:     "D-01（手順3と、手順6のうち `save_stories` の呼び出し）。T-04 と、T-03・T-06 の「出来事は残り、話題は保存されない」の確かめを先に書いて Red、`store.add_events` と `store.save_stories` の呼び出しを足して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-03", "F-01"]

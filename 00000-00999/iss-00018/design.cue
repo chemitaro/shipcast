@@ -59,8 +59,10 @@ design: {
 		## 最新の日誌
 
 		:::cards
-		## {t(meta.title)} {href=/{repo}/{day} badge={repo},{day} more=この日を読む}
+		## {t(meta.title)} {href=/{repo}/{day} badge={day} more=この日を読む}
 		{t(meta.lead)}
+
+		{repo} の日誌
 		（latest の順に繰り返す）
 		:::
 
@@ -72,6 +74,7 @@ design: {
 
 		- `latest` が空のときは、`## 最新の日誌` の下を `:::cards` の代わりに `:::note まだ日誌がありません` と「日誌は `shipcast run` で、登録した repository ごとに1日に1つ作られます。」にする。`repos` が空なら「repositoryごとの一覧」の節を出さない。
 		- `repos` は `journal_repos` の結果（読めない日誌だけの repository も一覧へは行ける）。
+		- `badge` は日付だけにする。ds.js のバッジは折り返さないので、長い repository の名前を入れると390pxの幅ではみ出す（S-02 のブラウザーで確かめた）。repository の名前は、折り返すカードの本文の最後の段落に書く。
 
 		一覧（`days` は新しい順、空でない）：
 
@@ -102,8 +105,9 @@ design: {
 	"D-04": {
 		title: "前付けの値のエスケープ `shipcast.page.markdown_text(value: str) -> str`"
 		text: """
-		- ASCIIの記号（`string.punctuation` の32字）を、それぞれ `&#{ord(c)};` に置き換える。ほかの字（英数字、空白、ASCIIでない字）はそのまま。改行（前付けの値にはない）は空白にする。
+		- ASCIIの記号（`string.punctuation` の32字）を、`&` は `&amp;`、ほかはそれぞれ `&#{ord(c)};` に置き換える。ほかの字（英数字、空白、ASCIIでない字）はそのまま。改行（前付けの値にはない）は空白にする。
 		- 理由：CommonMark（marked）は数値の文字参照を、記号として解釈せず文字として描く。ds.js の見出しの属性（末尾の `{…}`）、部品の行（`:::`）、行の中の部品（`:name[`）、`splitItem` の `**…**` は生の文字列の上の正規表現で、文字参照の `&#123;` などに当たらない。HTMLの要素にもならない（`<` が `&#60;`）。
+		- `&` だけ名前の参照にする理由：marked は数値の文字参照を一度文字に戻してから、実体参照の形の並びをそのまま残して書き出す。`&amp;` の値を `&#38;amp&#59;` にすると `&amp;` として書き出され、ブラウザーで `&` と見える。`&amp;amp&#59;` なら `&amp;amp;` と書き出され、`&amp;` の5字が見える（S-02 のブラウザーで確かめた）。
 		- 表紙と一覧で前付けの値を入れるのは、この関数を通した道だけ。
 		"""
 		satisfies: ["R-03"]
