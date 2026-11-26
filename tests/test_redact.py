@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 
@@ -104,3 +105,82 @@ def test_redact_normalizes_json_repaired_by_text_rule():
 def test_redact_rejects_non_string():
     with pytest.raises(TypeError):
         redact(None)
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        ("b'password=DUMMY'", f"b'password={MASK}"),
+        ("{u'password': u'DUMMY'}", f"{{u'password': {MASK}"),
+        ('r"token: DUMMY"', f'r"token: {MASK}'),
+        (r"\password=DUMMY", rf"\password={MASK}"),
+        (r"PASSWORD='it\'sEXAMPLE' tail", f"PASSWORD='{MASK}' tail"),
+        ('echo "PASSWORD=DUMMY"', f'echo "PASSWORD={MASK}'),
+        (r"prefix\nPASSWORD=DUMMY", rf"prefix\nPASSWORD={MASK}"),
+        ("my_api_token = DUMMY", f"my_api_token = {MASK}"),
+        ("db.password: DUMMY", f"db.password: {MASK}"),
+    ],
+)
+def test_redact_quoted_or_escaped_assignment(source, expected):
+    assert redact(source) == expected
+    assert redact(expected) == expected
+
+
+@pytest.mark.parametrize("secret", ["DUMMY" + '"' + "EXAMPLE", "DUMMY" + "\\" + "EXAMPLE"])
+def test_redact_escaped_json_fragment(secret):
+    source = "payload: " + json.dumps(json.dumps({"password": secret}))[1:-1]
+    expected = r"payload: {\"password\": \"" + MASK + r"\"}"
+    assert redact(source) == expected
+    assert redact(expected) == expected
+
+
+LONG_TEXT_PREFIXES = (
+    "a",
+    "-",
+    ".",
+    "_",
+    "\\",
+    '"',
+    "'",
+    "a-",
+    "a:",
+    "token",
+    "TOKEN",
+    "TOKEN_",
+    "secret.",
+    "password=",
+    "eyJ",
+    "eyJ-",
+    "eyJa-",
+    "xoxb-",
+    "ghp_",
+    "sk-.",
+    "bearer ",
+    "-----BEGIN ",
+    r"\u30f3",
+    r"\n",
+    "https://",
+)
+
+
+def long_input(prefix, form):
+    repeated = (prefix * (128_000 // len(prefix) + 1))[:128_000]
+    if form == "json-key":
+        return json.dumps({repeated + "!": "keep"})
+    if form == "json-value":
+        return json.dumps({"body": repeated})
+    if form == "nested-json-key":
+        return json.dumps({"body": json.dumps({repeated + "!": "keep"})})
+    return repeated
+
+
+@pytest.mark.parametrize("form", ["text", "json-key", "json-value", "nested-json-key"])
+@pytest.mark.parametrize("prefix", LONG_TEXT_PREFIXES)
+def test_redact_long_input_finishes_within_two_seconds(prefix, form):
+    source = long_input(prefix, form)
+
+    start = time.perf_counter()
+    redact(source)
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 2, f"{prefix!r} in {form}: {elapsed:.3f} seconds"

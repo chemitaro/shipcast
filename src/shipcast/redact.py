@@ -7,8 +7,10 @@ from typing import Any
 REDACTED = "[伏せた]"
 _A = r"(?:(?<![A-Za-z0-9_])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
 _Z = r"(?![A-Za-z0-9_])"
+_K = r"(?:(?<![A-Za-z0-9_.-])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
+_J = r"(?:(?<![A-Za-z0-9_-])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
 _KEY = r"(?:PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIALS?)"
-SECRET_KEY = re.compile(r"(?i)[A-Za-z0-9_.-]*" + _KEY + r"[A-Za-z0-9_.-]*")
+SECRET_KEY = re.compile(r"(?i)(?=[A-Za-z0-9_.-]*?" + _KEY + r")[A-Za-z0-9_.-]++")
 
 
 def _rd04_repl(m: re.Match[str]) -> str:
@@ -31,7 +33,7 @@ RULES = (
     ),
     (
         "RD-02",
-        re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@"),
+        re.compile(r"(?<![A-Za-z0-9+.-])([A-Za-z][A-Za-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@"),
         r"\1" + REDACTED + "@",
     ),
     (
@@ -43,11 +45,12 @@ RULES = (
         "RD-04",
         re.compile(
             r"(?i)"
-            + _A
-            + r"((?:\\?[\"'])?[A-Za-z0-9_.-]*"
+            + _K
+            + r"((?:\\?[\"'])?(?=[A-Za-z0-9_.-]*?"
             + _KEY
-            + r"[A-Za-z0-9_.-]*(?:\\?[\"'])?[ \t]*+[:=][ \t]*+)"
-            + r"(\\\"(?:(?!\\\")[^\n])*\\\"|\"(?:[^\"\\\n]|\\.)*\"|'[^'\n]*'|[^\n]+)"
+            + r")[A-Za-z0-9_.-]++(?:\\?[\"'])?[ \t]*+[:=][ \t]*+)"
+            + r"(\\\"(?:[^\\\"\n]|\\\\\\\"|\\\\\\\\|\\\\[^\\\"\n])*\\\""
+            + r"|\"(?:[^\"\\\n]|\\.)*\"|'(?:[^'\\\n]|\\.)*'|[^\n]+)"
         ),
         _rd04_repl,
     ),
@@ -63,7 +66,11 @@ RULES = (
     ("RD-08", re.compile(_A + r"(?:AKIA|ASIA)[0-9A-Z]{16}" + _Z), REDACTED),
     ("RD-09", re.compile(_A + r"xox[abposr]-[A-Za-z0-9-]{10,}"), REDACTED),
     ("RD-10", re.compile(_A + r"AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"), REDACTED),
-    ("RD-11", re.compile(_A + r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), REDACTED),
+    (
+        "RD-11",
+        re.compile(_J + r"eyJ[A-Za-z0-9_-]{5,}+\.[A-Za-z0-9_-]++\.[A-Za-z0-9_-]*+"),
+        REDACTED,
+    ),
 )
 
 
