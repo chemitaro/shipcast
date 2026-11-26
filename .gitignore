@@ -1,0 +1,29 @@
+# macOS metadata
+.DS_Store
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Scratch work (use-workbench)
+.workbench/
+
+# Personal config, runtime state and generated drafts live outside the repository.
+# These patterns are a safety net in case they are placed here by mistake.
+/config.local.*
+/state/
+/drafts/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Node
+node_modules/
