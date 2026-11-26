@@ -53,10 +53,10 @@ design: {
 
 		1. `repo.orca` が false なら、何も呼ばずに `CollectResult()` を返す（R-02）。
 		2. 1のコマンド（agent list）を読む。D-04 の誤りなら、その警告だけで空を返す。`result.truncated` が true なら、警告 `Orcaの会話の一覧が途中までしか返りませんでした` を足す。
-		3. 2のコマンド（repo list）を読む。`repos[]` のうち `path` が `repo.path` と同じものの `id` を集める（pathの比較は、どちらも `os.path.normpath` した文字列で行う。ファイルを開かず、symlinkは解かない）。D-04 の誤りなら、警告を足し、IDの集合を空にして続ける（pathだけで選ぶ）。
+		3. 2のコマンド（repo list）を読む。`repos[]` のうち、`id` と `path` が文字列の要素を、`path` が `repo.path` と同じもの（`own_ids`）と違うもの（`other_ids`）の `id` の集合に分ける（pathの比較は、どちらも `os.path.normpath` した文字列で行う。ファイルを開かず、symlinkは解かない）。D-04 の誤りなら、警告を足し、2つの集合を空にして続ける（pathだけで選ぶ）。
 		4. 会話を選ぶ：`agents[]` の要素のうち、`orcaSessionId` が空でない文字列、`updatedAt` が整数（真偽値は除く）、`worktreeId` が `::` を含む文字列で、次のどちらかを満たすもの。
-		   - `worktreeId` の最初の `::` より前（`<repo-id>`）が、3のIDの集合にある
-		   - `::` より後のpath（`normpath`）が、`repo.path`（`normpath`）と同じか、その配下（`path.startswith(repo_path + os.sep)`）
+		   - `worktreeId` の最初の `::` より前（`<repo-id>`）が `own_ids` にある
+		   - `<repo-id>` が `other_ids` になく、`::` より後のpath（`normpath`）が、`repo.path`（`normpath`）と同じか、その配下（`path.startswith(repo_path + os.sep)`）。`other_ids` にあるのは、`repo.path` の配下に入れ子に置かれた別のrepositoryなので除く
 		   さらに、`at = datetime.fromtimestamp(updatedAt / 1000, UTC)` が `start <= at < end` のもの。同じ `orcaSessionId` が二度出たら、最初のものだけを使う。形の合わない要素は黙って飛ばす（ほかのrepositoryの、知らない形の項目のため）。
 		5. 選んだ会話ごとに（`agents[]` の順に）、3のコマンド（agent read）を読む。D-04 の誤りなら、その会話を飛ばし警告を足す。`entries[]` のうち、`kind == "message"`、`role` が `user` か `assistant`、`text` が空白だけでない文字列のものを、順に残す。残りが0件の会話は、Eventにしない。
 
@@ -98,7 +98,7 @@ design: {
 	"D-05": {
 		title: "試験の継ぎ目と見本"
 		text: """
-		- 見本：`tests/fixtures/orca/agent-list.json`、`repo-list.json`、`agent-read-<名前>.json`（会話ごと）。D-02 の実際の出力の形（項目の名前・入れ子・外側の `id`・`ok`・`_meta`）を保ち、値はすべて架空にする（path は `/home/dev/demo-app` と `/home/dev/worktrees/demo-app/feature-x`、ほかのrepositoryは `/home/dev/other-app`、repo-id とセッションIDは `00000000-…` のような作った UUID、架空の題名と発言）。手元の実際の出力の値を写さない。
+		- 見本：`tests/fixtures/orca/agent-list.json`、`repo-list.json`、`agent-read-<名前>.json`（会話ごと）。D-02 の実際の出力の形（項目の名前・入れ子・外側の `id`・`ok`・`_meta`）を保ち、値はすべて架空にする（path は `/home/dev/demo-app` と `/home/dev/worktrees/demo-app/feature-x`、ほかのrepositoryは `/home/dev/other-app`、入れ子の別のrepositoryは `/home/dev/demo-app/vendor/lib`（`repo-list.json` に別のIDで登録）、repo-id とセッションIDは `00000000-…` のような作った UUID、架空の題名と発言）。手元の実際の出力の値を写さない。
 		- 継ぎ目：`shipcast.collect.orca.subprocess.run` を、argv を記録し、argv に応じて見本の文字列（と終了コード・標準エラー）を返す偽物に置き換える（`monkeypatch.setattr`）。失敗は、偽物が `FileNotFoundError`・`subprocess.TimeoutExpired` を投げる、`ok` が false の物と終了コード1を返す、終了コード1で標準出力を空にする、壊れたJSONを返す、で作る。
 		- repositoryは `RepoConfig(id="demo", path=Path("/home/dev/demo-app"), ref="main", title="demo", orca=True)`（pathを開かないので、存在しなくてよい）。日は 2026-11-26、tz は `ZoneInfo("Asia/Tokyo")`（その日は UTC の 2026-11-25T15:00:00Z（`1795618800000` ミリ秒）から 2026-11-26T15:00:00Z（`1795705200000`）の前まで）。
 		"""

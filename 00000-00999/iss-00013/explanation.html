@@ -96,13 +96,18 @@ Orcaは、作業用のworktreeを、登録したrepositoryのpathの**外**に�
 |---|---|---|
 | `1111…::/home/dev/demo-app` | 入る | pathが同じ |
 | `1111…::/home/dev/worktrees/demo-app/feature-x` | 入る | `<repo-id>` が同じ（pathの外のworktree） |
-| `9999…::/home/dev/demo-app/sub` | 入る | pathの配下 |
+| `9999…::/home/dev/demo-app/sub` | 入る | pathの配下（`9999…` はOrcaに登録されていない） |
+| `3333…::/home/dev/demo-app/vendor/lib` | 入らない | 配下だが、`3333…` はOrcaに別のpathで登録した、入れ子の別のrepository |
 | `9999…::/home/dev/demo-app-old` | 入らない | 前方だけ同じで、配下ではない |
 | `2222…::/home/dev/other-app` | 入らない | ほかのrepository |
 | `folder:abcd` | 入らない | folderのworkspace（`::` がない） |
 :::
 
-`orca repo list` が読めないときは、警告を出して、pathの一致だけで選びます。
+`orca repo list` が読めないときは、警告を出して、pathの一致だけで選びます（このときは入れ子の別のrepositoryを見分けられません）。
+
+:::note 既存の試験への影響
+`COLLECTORS` に `OrcaCollector()` を足すと、設定で `orca` を省いたrepositoryは既定の `orca = true` になり、Gitの試験が別のプロセスで動かす `shipcast collect` が本物の `orca` を呼んでしまいます。そこで、その試験の設定に `orca = false` を書き、登録の順の試験を `git`・`specdock`・`orca` にします。既存の試験の変更は、この2か所だけです。
+:::
 
 ## 「その日の会話」の決め方
 

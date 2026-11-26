@@ -5,14 +5,14 @@ goal: "`main` へ入れる。入った後、`shipcast collect` が `orca = true`
 steps: {
 	"S-01": {
 		title:    "架空の値の見本（`tests/fixtures/orca/`）と、試験の偽物の `subprocess.run`"
-		text:     "D-02、D-05。`tests/fixtures/orca/` に `agent-list.json`・`repo-list.json`・会話ごとの `agent-read-<名前>.json` を、D-02 の項目の名前と入れ子のまま、完全に架空の値で書く。見本には T-01・T-04 の場合（main checkoutの会話、登録したpathの外のOrcaのworktreeの会話（`<repo-id>` で結びつく）、配下のpathの会話、ほかのrepositoryの会話、folderのworkspaceの会話、日の境の4つの `updatedAt`、`tool` と `system` の記録、空白だけの発言、発言が0件の会話、`limited` が true の会話、題名が空の会話、同じ `orcaSessionId` の重複）を入れる。`tests/test_collect_orca.py` に、見本を読んで argv ごとに返し、argv を記録する偽物の `subprocess.run` を書く。完了の条件：見本がJSONとして読め、手元の実際のOrcaの記録から写した値（題名、発言、path、セッションID、repositoryの名前）がないこと（`rg` で確かめる）。`uv run ruff check` が通る。"
+		text:     "D-02、D-05。`tests/fixtures/orca/` に `agent-list.json`・`repo-list.json`・会話ごとの `agent-read-<名前>.json` を、D-02 の項目の名前と入れ子のまま、完全に架空の値で書く。見本には T-01・T-04 の場合（main checkoutの会話、登録したpathの外のOrcaのworktreeの会話（`<repo-id>` で結びつく）、配下のpathの会話、配下に入れ子に置かれた別のrepository（`repo list` に別のpathで登録）の会話、ほかのrepositoryの会話、folderのworkspaceの会話、日の境の4つの `updatedAt`、`tool` と `system` の記録、空白だけの発言、発言が0件の会話、`limited` が true の会話、題名が空の会話、同じ `orcaSessionId` の重複）を入れる。`tests/test_collect_orca.py` に、見本を読んで argv ごとに返し、argv を記録する偽物の `subprocess.run` を書く。完了の条件：見本がJSONとして読め、手元の実際のOrcaの記録から写した値（題名、発言、path、セッションID、repositoryの名前）がないこと（`rg` で確かめる）。`uv run ruff check` が通る。"
 		realizes: ["R-01"]
 		session:  "impl"
-		status:   "todo"
+		status:   "doing"
 	}
 	"S-02": {
 		title:    "`OrcaCollector`（`shipcast.collect.orca`）と登録"
-		text:     "D-01、D-03、D-04。T-01〜T-04 を `tests/test_collect_orca.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/collect/orca.py` に `OrcaCollector` を書き、`src/shipcast/collect/__init__.py` を `COLLECTORS = (GitCollector(), SpecDockCollector(), OrcaCollector())` にして通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
+		text:     "D-01、D-03、D-04。T-01〜T-04 を `tests/test_collect_orca.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/collect/orca.py` に `OrcaCollector` を書き、`src/shipcast/collect/__init__.py` を `COLLECTORS = (GitCollector(), SpecDockCollector(), OrcaCollector())` にして通す（Green）。同じ手順で、既存の試験の2か所を直す（requirement の includes）：`tests/test_collect_git.py` の `write_config` が各 `[[repos]]` に `orca = false` を書く、`tests/test_collect_specdock.py` の `test_specdock_is_registered_after_git` の並びを `[\"git\", \"specdock\", \"orca\"]` にする。完了の条件：`test_commands` がすべて終了コード0で、`PATH` から `orca` を外した環境（例 `env PATH=<uv と python だけの dir> uv run pytest -q`、または `orca` を見つけられない状態）でも `uv run pytest -q` が通り、`tests/` の中に本物の `orca` を呼ぶ経路がないこと（`rg` で `write_config` と `subprocess` の呼び出しを確かめる）。"
 		realizes: ["R-01", "R-02", "F-01"]
 		after:    ["S-01"]
 		session:  "impl"
@@ -22,7 +22,7 @@ steps: {
 
 tests: {
 	"T-01": {
-		title:    "見本（tz Asia/Tokyo、日 2026-11-26）から、`repo.path` と同じpath・その配下のpath・`<repo-id>` が `repo list` の `repo.path` のIDに当たるpathの外のworktreeの会話のうち、`updatedAt` が `1795618800000`（境のちょうど）と `1795705199999` のものが、1つの会話につき1件の `conversation` のEventになり、`1795618799999`・`1795705200000` のもの、ほかのrepository、folderのworkspace、`/home/dev/demo-app-old` のような前方だけが同じpath、発言が0件の会話は入らない。各Eventの `id`（`event_id(\"orca\", \"demo\", \"conversation:<id>:2026-11-26\")`）、`source`、`repo_id`、`kind`、`at`、`title`（空の題名は `（題名のない会話）`）、`actor`、`refs`、`body`（見出しの行、`limited` の行、`[user]`・`[assistant]` のかたまりが古い順、`tool`・`system`・空白だけの発言がない）が D-03 のとおり。重複した `orcaSessionId` は1件だけ"
+		title:    "見本（tz Asia/Tokyo、日 2026-11-26）から、`repo.path` と同じpath・その配下のpath・`<repo-id>` が `repo list` の `repo.path` のIDに当たるpathの外のworktreeの会話のうち、`updatedAt` が `1795618800000`（境のちょうど）と `1795705199999` のものが、1つの会話につき1件の `conversation` のEventになり、`1795618799999`・`1795705200000` のもの、ほかのrepository、folderのworkspace、`/home/dev/demo-app-old` のような前方だけが同じpath、`repo.path` の配下でも `<repo-id>` が `repo list` の別のpathのIDの会話（入れ子の別のrepository、例 `/home/dev/demo-app/vendor/lib`）、発言が0件の会話は入らない。各Eventの `id`（`event_id(\"orca\", \"demo\", \"conversation:<id>:2026-11-26\")`）、`source`、`repo_id`、`kind`、`at`、`title`（空の題名は `（題名のない会話）`）、`actor`、`refs`、`body`（見出しの行、`limited` の行、`[user]`・`[assistant]` のかたまりが古い順、`tool`・`system`・空白だけの発言がない）が D-03 のとおり。重複した `orcaSessionId` は1件だけ"
 		verifies: ["R-01"]
 	}
 	"T-02": {
@@ -46,7 +46,7 @@ exit:         "PRが最終品質ゲートとCIに合格し、タスク担当が�
 // 関門（coding-task）。保証レベル light の既定と、本人の決定 18〜21（init-00001 の plan.cue の delivery）に従う。
 gates: {
 	spec_review: "Claude `spec-reviewer`（Opus 5.5 / medium）。P0・P1がなくなるまで、3回まで"
-	checkpoints: "なし。理由：手順は2つで、1人の実装担当が続けて書き、どれもこのIssueの中の新しいmoduleと試験で、既存のコードの変更は `__init__.py` の2行だけ。途中で止めて見る利得が小さい"
+	checkpoints: "なし。理由：手順は2つで、1人の実装担当が続けて書き、どれもこのIssueの中の新しいmoduleと試験で、既存のコードの変更は `__init__.py` の2行と、既存の試験の2か所（設定の `orca = false`、登録の順）だけ。途中で止めて見る利得が小さい"
 	final_quality_gate: {
 		scope:          "開始のコミット（統括が作ったworktreeの作業の始めの `HEAD`、`6055bb9`）から S-02 の後の `HEAD` まで"
 		perspectives:   ["functional-correctness", "requirements-closure", "test-adequacy", "security-baseline"]
