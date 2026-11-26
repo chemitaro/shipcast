@@ -9,26 +9,186 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: iss-00014 モデルの経路（分析と書き手の差し替え）
-lead: 分析と書き手のモデルを、設定の経路の名前（codex・antigravity・claude・fake）で呼び分ける部品と、伏せる処理を作ります。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+title: iss-00014 モデルの経路 ― 送信の入口・伏せる処理・agy の守り
+lead: 分析と書き手のモデルを、設定の経路の名前（codex・antigravity・claude・fake）で呼び分ける部品を作ります。外部のモデルへの送信はすべて1つの入口を通り、秘密情報らしい文字列を伏せ、エージェントの中からは `agy` を呼びません。
+category: 説明資料（Issue・strict）
+audience: このIssueの実装担当・レビュアー、後の iss-00015・iss-00016 の担当、統括
+status: 仕様を確定（2026-11-26・仕様レビュー待ち）
+updated: 2026-11-26
+docid: iss-00014
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-分析と書き手のモデルを、設定の経路の名前（codex・antigravity・claude・fake）で呼び分ける部品と、伏せる処理を作ります。親のE3の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 呼ぶ前に必ず秘密らしい文字列を伏せる
-- エージェントの中では antigravity を呼ばずに止まる
-- Codexのより安いモデルの名前を確かめる
+:::summary
+- なぜ送信の入口を1か所にするのか、その入口で何が順に起きるのか
+- 伏せる規則（RD-01〜RD-11）と、伏せすぎを受け入れる理由
+- エージェントの中で `agy` を止める印と、閉じる側に倒す判定
+- 4つの経路の呼び方と、失敗したときの例外
+- 本物のコマンドを起動せずに試験で確かめる方法
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`strict`** です。外部のモデルへの送信の唯一の境界（`redact()`）と、エージェントの中から `agy` を呼ばない守りを持つため、`strict` にしました。仕様のレビューにはChatGPTの2人目が付きます。印の環境変数は `CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_*` です。試験では偽のrunnerだけを使い、本物の `agy` を起動しません。
+## 背景：なぜこのIssueが strict なのか
+
+shipcastは、その日の出来事（Git・SpecDock・Orcaの会話のログ）を外部のモデルに渡して、話題にまとめ、日誌を書かせます。会話のログには、トークンや鍵が紛れ込むことがあります。外部へ一度送った文字列は取り消せません。
+
+また、書き手に使う Antigravity の `agy -p` は、本人が直接動かすscript（夜の launchd、手動の実行）からは使えますが、Claude Code・Codex・Orca の作業者などのエージェントの中から呼ぶと、個人のプランを第三者のツールで包む形になり、Antigravity の規約に反します。
+
+:::warning 取り消せない2つの失敗
+1. 伏せていない秘密が外部のモデルへ出る
+2. エージェントの中から `agy` が起動される
+
+どちらも起きた後では戻せないので、保証レベルを **strict** にしました。仕様のレビューと最終品質ゲートに ChatGPT の2人目が付き、マージは本人が行います。
 :::
+
+## 送信の入口：GuardedRoute
+
+呼ぶ側（後の iss-00015・iss-00016）は、`get_route(設定)` で `GuardedRoute` を受け取り、`complete(prompt, system=..., want_json=...)` だけを呼びます。経路の実装は非公開で、`GuardedRoute` を通さずには作れません。
+
+```plantuml id=guarded
+@startuml
+title complete() の中で起きる順番
+start
+:prompt・system が文字列か確かめる;
+note right: 文字列でなければ TypeError
+if (経路が antigravity?) then (はい)
+  if (エージェントの印がある?) then (ある)
+    :RouteRefused で止める;
+    note right: 子のプロセスを作らない
+    stop
+  endif
+endif
+:redact() で prompt と system を伏せる;
+note right: 失敗したら例外をそのまま上げ、送らない
+if (want_json?) then (はい)
+  :system の末尾に「JSONだけを返す」の1文を足す;
+endif
+if (antigravity で 200,000 バイト超?) then (超える)
+  :RouteFailed で止める;
+  stop
+endif
+:経路の実装を呼ぶ（時間の上限 600秒）;
+if (失敗・時間切れ・空の応答?) then (はい)
+  :RouteFailed;
+  stop
+endif
+:応答の本文を返す;
+stop
+@enduml
+```
+
+:::note 判定は「呼ぶたび」に行います
+エージェントの印は、`get_route` のときではなく、`complete` を呼ぶたびに調べます。出来事のない日は、書き手を作ってもモデルを呼ばないので、止める必要がないからです。
+:::
+
+## 伏せる処理：redact()
+
+`redact(text)` は、規則の表 `RULES` を上から順に当て、当たった部分を `[伏せた]` に置き換えます。規則を増やすときは、表に1行足します。
+
+:::datatable 伏せる規則
+| 番号 | 対象 | 例（架空の値） | 結果 |
+|---|---|---|---|
+| RD-01 | PEMの秘密鍵の塊（閉じがなければ末尾まで） | `-----BEGIN RSA PRIVATE KEY-----` … `-----END …-----` | `[伏せた]` |
+| RD-02 | URLの中の利用者:パスワード | `https://user:pass@example.com` | `https://[伏せた]@example.com` |
+| RD-03 | `Bearer` の後の値 | `Bearer DUMMYDUMMY` | `Bearer [伏せた]` |
+| RD-04 | 秘密の名前の鍵の値（行の末尾まで） | `export DB_PASSWORD="x"`、`api_token: x` | `export DB_PASSWORD=[伏せた]` |
+| RD-05 | GitHub のトークン | `ghp_`・`gho_`・`ghu_`・`ghs_`・`ghr_` で始まる | `[伏せた]` |
+| RD-06 | GitHub の細かい権限のトークン | `github_pat_` で始まる | `[伏せた]` |
+| RD-07 | `sk-` の鍵 | OpenAI・Anthropic などの鍵 | `[伏せた]` |
+| RD-08 | AWS のアクセスキーID | `AKIA`・`ASIA` と16文字 | `[伏せた]` |
+| RD-09 | Slack のトークン | `xoxb-`・`xoxp-` など | `[伏せた]` |
+| RD-10 | Google の API の鍵 | `AIza` と35文字 | `[伏せた]` |
+| RD-11 | JWT | `eyJ…​.eyJ…​.…` | `[伏せた]` |
+:::
+
+:::columns
+### 伏せすぎは受け入れる
+RD-04 は、鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` などを含む行の値を、大小を問わず伏せます。`max_tokens: 1000` のような秘密でない値も伏せますが、日誌の質が少し下がるだけなので、閉じる側に倒します。
+
+### 伏せられないものもある
+規則の形に当てはまらない秘密（独自の形のトークン、鍵の名前のない値）は伏せられません。見つけたら、規則を表に足します。応答（モデルが返す文）は手元の日誌になるだけなので伏せません。
+:::
+
+## エージェントの中の守り
+
+:::danger エージェントの中からは antigravity の経路を呼ばない
+次の環境変数の名前が1つでもあれば、値によらず（空でも）エージェントの中と判定し、`agy` を起動する前に `RouteRefused` で止めます。環境を読めないときも止めます。
+:::
+
+:::keyvalue cols=1
+- `CLAUDECODE` | Claude Code の中
+- `AI_AGENT` | エージェントの中を示す一般の印
+- `ORCA_AGENT_SESSION_ID` | Orca の作業者の中
+- `CODEX_` で始まる名前 | Codex の中（前方一致）
+:::
+
+- `RouteRefused` は、見つけた印の **名前だけ** を示し、値は含めません。本人は、普通の端末か launchd から実行し直します。
+- 重ねの守りとして、子のプロセスを作る関数 `run_subprocess` も、`agy` を起動する前に本物の環境変数を調べます。試験で環境を差し替えても、作業者の中では `agy` が起動しません。
+- 利用者が普段の環境に `CODEX_HOME` などを置くと、antigravity の経路は止まります。閉じる側に倒すため、これを受け入れます。
+
+## 4つの経路
+
+:::datatable 経路と呼び方
+| 経路 | 使う場面 | 呼び方の要点 | 応答の取り出し |
+|---|---|---|---|
+| `fake` | 試験・予行 | 子のプロセスを作らない。`responder` を渡せば、伏せた後の入力でそれを呼ぶ | 受け取った値を並べた決まったJSON |
+| `codex` | 分析の既定 | `codex exec --model … --sandbox read-only --ignore-user-config --ephemeral --cd <空のディレクトリ> --output-last-message <ファイル> -` | 最後のメッセージのファイル |
+| `claude` | 予備 | `claude -p --model … --strict-mcp-config --no-session-persistence --tools ""` | 標準出力 |
+| `antigravity` | 書き手の既定 | `agy -p <text> --output-format json --model gemini-4-neon-high --mode plan --sandbox` | JSONの `response`（`status` が `SUCCESS` のとき） |
+:::
+
+:::details 引数をどう確かめたか
+- `codex`（codex-cli 0.172.0）と `claude` は、`--help` で確かめました。
+- `agy`（1.5.12）は **起動していません**。Antigravity の公式の文書（headless と CLI reference のページ、2026-11-26）で確かめました。文書は、普通の標準入力からプロンプトを読む方法を示さないので、プロンプトは `-p` の引数で渡し、長さに 200,000 バイトの上限を付けます。
+- 本物の `agy` での最初の確かめは、本人の手動の実行です。引数が誤っていれば `RouteFailed` として見つかります。
+:::
+
+## 失敗したときの動き
+
+:::datatable 例外
+| 例外 | いつ | 呼んだ側がすること |
+|---|---|---|
+| `UnknownRoute` | 知らない経路の名前 | 設定を直す（使える4つの名前が文に出る） |
+| `RouteRefused` | エージェントの中の antigravity | 普通の端末か launchd から実行し直す |
+| `RouteFailed` | 終了コードが0でない、時間切れ、コマンドがない、空の応答、JSONが読めない、長すぎる | 失敗として記録し、次の実行で同じ材料から書き直す |
+| `redact()` の例外 | 伏せる処理の失敗（文字列でない入力を含む） | 包まずにそのまま上がる。外部へは何も送られていない |
+:::
+
+`RouteFailed` は、経路の名前、終了コード、時間切れか、理由、標準エラーの末尾2000文字（伏せたもの）を持ちます。
+
+## 確かめ方
+
+:::checklist 試験で確かめること（T-01〜T-08）
+- 4つの経路が設定の名前で選べ、知らない名前で止まる（T-01）
+- 規則の表のとおりに伏せられ、普通の文は変わらず、二度通しても同じ（T-02）
+- どの経路でも、実装に届く文字列が伏せた後のもの（T-03）
+- 印があると antigravity が子のプロセスを作らずに止まる（T-04）
+- 失敗・時間切れ・空の応答が `RouteFailed` になる（T-05）
+- 伏せる処理が失敗したら、実装が呼ばれない（T-06）
+- 設定の見本に、より安いモデル `gpt-6-luna` の名前がある（T-07）
+- 長すぎるプロンプトで `agy` を起動しない（T-08）
+:::
+
+:::tip 試験は本物を起動しません
+試験は、子のプロセスを作る関数（runner）を偽物に差し替え、呼ばれた引数と標準入力を記録して確かめます。さらに、試験のファイルは `subprocess.run` を「呼ばれたら落ちる関数」に差し替えます。外部のモデルと本物の `agy` は、試験でもエージェントの作業でも呼びません。
+:::
+
+## より安い分析のモデル
+
+`codex debug models`（モデルを呼ばずに一覧を出す）で確かめると、今の世代で最も安いのは `gpt-6-luna`（「Fast and affordable model for easier tasks.」）でした。`gpt-6.2` の Luna はありません。既定は `gpt-6.2-sol` のままにし、設定の見本に注記だけを書きます。足りるかどうかは、本物の経路で比べた後に本人が決めます。
+
+## 残るリスク
+
+:::warning 完全には止められないこと
+- `codex` と `agy` には、道具を完全に止める引数がありません。出来事の中の指示（プロンプトの注入）で、モデルが手元のファイルを読むと、その中身は伏せる処理を通りません。空の作業ディレクトリ、読み取りだけの sandbox、`plan` のモードで狭め、後のIssueのプロンプトでも禁じます。
+- Antigravity の CLI が自分の道具の中で付ける印は、文書にありません。2026-12-19 の規約の読み直しのときに見直します。
+:::
+
+## このIssueで変えるファイル
+
+- `src/shipcast/redact.py`、`tests/test_redact.py`（新規）
+- `src/shipcast/models.py`、`tests/test_models.py`（新規。既存の `shipcast.model` はデータの型で、別のもの）
+- `src/shipcast/config.py` の `DEFAULT_CONFIG_TEXT` の1行と、`tests/test_config.py` の試験
 
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
