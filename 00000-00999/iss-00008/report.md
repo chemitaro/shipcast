@@ -29,6 +29,25 @@ ID: "iss-00008"
 
 ## Outcome
 
+- S-01 `674fc50249184ddbe1632efaef8b865ef2c5d4ff` で Python 3.12、uv の package、開発依存、lockfile、Ruff と pytest の設定を追加。
+- S-02 `a984a9c10321b407dee8723c72fc245d6ae8c90b` で CLI と7つのコマンド、9つの未実装の葉を登録。コンソールスクリプトと `python -m shipcast` に同じ入口を使用。
+- S-03 `07fe2f495f26a1d30dbc44b1bbf563e3b954510a` で GitHub Actions の検証 workflow と T-07 を追加。
+
 ## Verification
 
+- 開始コミット `606bec38f825a4a3bb8e418265fe79bf98918179` のベースラインは、`uv sync --locked` が2（pyproject.toml なし）、`uv run ruff check` が0、`uv run pytest -q` と `uv run shipcast --help` が各2（実行ファイルなし）。
+- S-01 の package 読み込みテストは Red が1件（`ModuleNotFoundError`）、Green が1件。新しいローカル clone で `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` がすべて0。
+- S-02 は `uv run pytest -q tests/test_cli.py` で Red が20件失敗・3件合格、Green が23件合格。 `uv sync --locked`、`uv run ruff check`、`uv run shipcast --help` は0。コンソールスクリプトと `python -m shipcast --help` の出力は一致。
+- S-03 は `uv run pytest -q tests/test_cli.py::test_ci_runs_local_checks_for_pull_requests_and_main_pushes` で Red が1件（workflow ファイルなし）、Green が1件。
+- S-03 のコミットで指定4コマンドがすべて0。pytest は24件合格。CLI のヘルプは7コマンドを表示。Git の差分チェックに合格し、仕様3ファイルの SHA-256 はレビュー記録と一致。
+- D-05 のリリース確認で `actions/checkout` v7.0.1、`astral-sh/setup-uv` v10.4.0 を取得し、指定のメジャー版 `v7` と `v10` を採用。
+
+## 逸脱と判断
+
+- P2 の申し送りに従い、`repo`、`draft`、`schedule` に下位コマンドがなければ、そのコマンドの使い方を標準エラーに出して2で終了する。T-05 で3件を検証した。
+- 新しい Ruff 設定を適用すると、既存の `.agents/skills/spec-dock-grill-with-docs/scripts/finalize-artifact.py` から14件の指摘が出た。shipcast の検査で既存のエージェント用ツールが対象になるのを避けるため、Ruff の `extend-exclude` に `.agents` を指定した。
+- 外部モデルを呼ばないというタスクの指示に従い、git-autocommit によるメッセージ生成を省き、各ステップを通常の Git コミットにした。
+
 ## Residual Risks / Follow-ups
+
+- S-04 の AGENTS.md と T-06、PR 上での GitHub Actions 実行結果 T-08 はタスク担当に引き継ぐ。
