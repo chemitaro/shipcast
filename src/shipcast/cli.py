@@ -6,6 +6,7 @@ from functools import partial
 
 from shipcast import __version__
 
+from shipcast import draft  # isort: skip
 from shipcast import repo  # isort: skip
 from shipcast import run as run_command  # isort: skip
 from shipcast import schedule  # isort: skip
@@ -47,7 +48,9 @@ COMMANDS = (
         Entry("serve", "日誌を閲覧するためのサーバーを起動する", serve.configure), "iss-00017"
     ),
     Command(
-        Entry("draft", "発信の下書きを作る"), "iss-00020", (Entry("x", "X向けの下書きを作る"),)
+        Entry("draft", "発信の下書きを作る"),
+        "iss-00020",
+        (Entry("x", "X向けの下書きを作る", draft.configure_x),),
     ),
     Command(
         Entry("schedule", "日誌作成のスケジュールを管理する"),
