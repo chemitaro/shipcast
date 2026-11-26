@@ -8,6 +8,7 @@ from shipcast import __version__
 
 from shipcast import draft  # isort: skip
 from shipcast import repo  # isort: skip
+from shipcast import run as run_command  # isort: skip
 from shipcast import serve  # isort: skip
 from shipcast import write  # isort: skip
 from shipcast.collect import command as collect_command  # isort: skip
@@ -38,7 +39,10 @@ COMMANDS = (
     ),
     Command(Entry("collect", "日誌の素材を集める", collect_command.configure), "iss-00011"),
     Command(Entry("write", "集めた素材から日誌を書く", write.configure), "iss-00016"),
-    Command(Entry("run", "素材の収集から日誌の作成までを実行する"), "iss-00021"),
+    Command(
+        Entry("run", "素材の収集から日誌の作成までを実行する", run_command.configure),
+        "iss-00021",
+    ),
     Command(
         Entry("serve", "日誌を閲覧するためのサーバーを起動する", serve.configure), "iss-00017"
     ),
