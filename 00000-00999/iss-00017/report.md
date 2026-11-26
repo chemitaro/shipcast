@@ -92,6 +92,14 @@ S-04 の後の `test_commands`：`uv sync --locked` 0、`uv run ruff check` 0、
 - 実サーバーで `curl`：Host `evil.example` は 400、`/_ds/%2e%2e/%2e%2e/README.md` は 404、`/_ds/ds.css` は 200 `text/css; charset=utf-8`、どの応答にも CSP・nosniff・no-referrer と `Server: shipcast`。
 - Ctrl+C：プロセスグループへの SIGINT で、`python -m shipcast serve` と `uv run shipcast serve` の両方が終了コード 0。
 
+### 最終品質ゲートの直しと T-07 のやり直し（2026-11-26）
+
+- 直し1 `539a66a`（impl：Codex GPT-6.2 Sol / medium、dispatch `ctx_f8513ff9abd2`）：CSP の `script-src` を ds.js の2つの版の道筋に絞った。版が `spec-dock/design-system/ds.js` の `PLANTUML_VERSION`・`HLJS_VERSION` とそろう試験、道筋のない `https://unpkg.com` を含まない試験。Red `uv run pytest -q tests/test_serve.py -k security_headers` が 11 failed → Green 11 passed。全体 366 passed
+- 直し2 `681d0b3`（同じ実装担当）：`split_path` を生の `/` で分けてから部分ごとに復号（`%2f`・`%5c` を拒む）、`host_allowed` で点のない1語の名前を受けない、README の Host の説明。Red 4 failed・1 failed → Green 41 passed・14 passed。全体 372 passed
+- main の取り込み `d860f28`：PR #29 が main（`994f3b9`、iss-00011〜00013）と `src/shipcast/cli.py` の import の隣り合う2行で競合したので、main を取り込み、`serve` と `collect` の両方の import を残した（rebase・force push はしない）
+- T-07 のやり直し（`681d0b3` の配信、ヘッドレスの Chrome、1280 と 390、`.workbench/coding-task/iss-00017/t07/final.json`）：見本の日誌・閉じないコメントの日誌・BOM 付きの日誌・404 は、前回と同じく描け（図 1/1、色分け、390px で横にはみ出さない）、違反は見本の `onerror` の1件だけ。本文に `<meta name="ds-vendor-base" content="https://unpkg.com/shipcast-csp-probe-not-a-package@0.0.0/">` を含む日誌（`/demo-app/2026-11-30`）では、その先の script の要求が CSP で拒まれ（`failed: csp`）、色分けは決まった版から読まれた（直す前は CSP に止められず要求が出ていた：`probe-before.json`）
+- 実サーバー：`/_ds/vendor%2fmarked.umd.js` は 404、`/_ds/vendor/marked.umd.js` は 200、Host `mac:8765` は 400
+
 ## 逸脱と判断
 
 - ブランチ：計画の `gates.pr` は `iss-00017` だが、統括の指示（2026-11-26、本人の指示の伝達）で、`spec-dock work start iss-00017 --branch chemitaro/iss-00017` を仕様レビューの完了前に実行し、現在のブランチ `chemitaro/iss-00017` をそのまま使う。PRもこのブランチから作る
@@ -104,8 +112,10 @@ S-04 の後の `test_commands`：`uv sync --locked` 0、`uv run ruff check` 0、
 
 - **前付けの値の生のHTML（デザインシステム側の挙動）**：前付けの `lead` に閉じない `<!--` があると、ds.js がページの頭（シェル）を組むときに壊れ、`mountShell` の例外で本文が描かれない（T-07 で確認。本文の中の `<!--` では起きない）。日誌の書き手（iss-00016）は前付けの値に生のHTMLを書かないこと。shipcast の包みでは防げない（ds.js の中の処理）。
 - 本文が閉じていないコードの囲みで終わる日誌では、末尾の `<!-- -->` がコードの中に見える。
-- `https://unpkg.com` 全体を script に許している（ds.js が決まった版の部品を読むため）。
-- Host の検査は、`.ts.net` でない独自の名前で読む使い方を拒む。
+- CSP の unpkg の道筋は ds.js の部品の版に結び付く。配信する ds.js は本人の登録した repository（または `design_system_dir`）のもので、その SpecDock が部品の版を上げると、図と色分けが描けなくなる（本文は描ける）。試験はこの repository の ds.js の版とだけ比べる（仕様レビュー round 2・3 の P2）。
+- 起動の検査は `ds.css`・`ds.js` だけを見て、`vendor/marked.umd.js` の欠けを見ない（仕様レビューの ChatGPT P2）。
+- Host の検査は、`.ts.net` でない独自の名前や、点のない短い名前で読む使い方を拒む。
+- `serve` は設定ファイルの読み取りの `OSError`（権限、ディレクトリ）を `ConfigError` に変えず、トレースバックになる（最終品質ゲートの ChatGPT P2。`config.py` の側の扱い）。
 - iss-00018 への申し送り：一覧 `/<repo>/` を足すとき、`split_path` に末尾の `/` の扱いを足す（今は `None`）。
 - 統括への申し送り：親 epic-00005 の F-03・D-01・D-05 が `<!--` を `<\!--` に置き換える案のまま。子の decisions と試作の証拠に合わせて親を直すかの判断。
 - ChatGPT の仕様レビューの2人目は取得できなかった（60分応答なし）。

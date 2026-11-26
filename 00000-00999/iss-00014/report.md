@@ -48,6 +48,16 @@ ID: "iss-00014"
 - レビュアー：Claude `code-reviewer`（Opus 5.5 / medium、axis both）。タスク担当が `31a643c` で `uv run ruff check` と `uv run pytest -q`（308 passed）の合格を確かめてから依頼した
 - 結果のファイル：shipcastの `.workbench/code-review/iss-00014-cp1/round-1.json`、`round-1.check.json`
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（キャンペーン `iss-00014-fqg-2` の attempt 01）
+- 合格のコミット：`74a6322bdca167605db10e8e6bc39fcc2f012084`（範囲 `f68349a..74a6322`、clean、upstream と一致）
+- 主：Claude `quality-gate-reviewer`（Opus 5.5 / high）。pass、P0 0・P1 0・P2 1、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline（計画の `security` は契約の観点の名前 `security-baseline` に当てた）
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（420 passed）がすべて exit 0
+- 2人目：ChatGPT GPT-6 / Extra High（`chatgpt-code-review-strict`、選択の証拠 verified）。fail、P1 1（文の中の複数行の JSON の断片で、鍵と値の間に改行があると値が残る）。タスク担当が再現し、受け入れた仕様の文の層の限界（R-02 の受入にない形、D-01・risks の「規則に当てはまらない形の秘密は伏せられない」）として、証拠を付けて反論した（コードを変えない）。2人目の判定は合格の条件ではない
+- 経緯：前のキャンペーン `iss-00014-fqg-1` の attempt 01（`7cdb371`）で、主と試験は合格、ChatGPT の P1（引用の中のエスケープで値の残りが漏れる）と P2（規則の時間の2乗）を再現した。仕様を直して仕様レビューに合格し（上の「最終品質ゲートの1回目の後の仕様の変更」）、S-05 を実装した。権威の文書が変わったため、新しいキャンペーン fqg-2 で全範囲を見直した
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00014-fqg-2/closure.md`（と `review-response.md`）、前の経緯は `.workbench/final-quality-gate/iss-00014-fqg-1/`
+
 ## Outcome
 
 - S-01 `55cd0ee36be55027a8f1ec7a76a72bfb5b165ecb`。文章・JSONの伏せる処理（T-02）。
@@ -75,3 +85,9 @@ ID: "iss-00014"
 - 外部モデルの利用を禁じる依頼とリポジトリの契約を適用し、コミットメッセージはローカルで作成した。明示パスの stage、差分確認、通常の Git コミット、コミット後の親と worktree の確認を行った。
 
 ## Residual Risks / Follow-ups
+
+- 伏せる処理の文の層の規則で、まだ伏せられない形（規則の表 `RULES` を足す候補）：(1) 文の中の複数行の JSON の断片で、`:` の後で行が終わり、値が次の行にある形（最終品質ゲートの ChatGPT の P1、反論で閉じた）、(2) 引用の閉じの直後に続くシェルの連結（`'it'\''s…'`、`"abc"def`）の後ろ（主のレビューの P2）。JSON を prompt の全体として渡す道筋（iss-00015・iss-00016 の約束）は構造をたどって伏せるので影響しない。規則を足す別の Issue にするかは統括と本人が決める
+- `agy -p` の道具による残る危険（F-05）は本人が受け入れた（Q-01）。その採用の記録を `content/decisions/` に残すかは統括と本人が決める（仕様レビューの P2）
+- Antigravity の CLI が自分の道具の中で付けるエージェントの印は文書になく、2026-12-19 の規約の読み直しのときに見直す
+- `agy` の引数は公式の文書だけで確かめた。最初の本物の実行は本人の手動
+- 既定の分析のモデルは `gpt-6.2-sol` のまま。`gpt-6-luna` で足りるかは本人が比べて決める
