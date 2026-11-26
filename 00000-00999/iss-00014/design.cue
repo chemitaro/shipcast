@@ -42,8 +42,9 @@ design: {
 			_A = r"(?:(?<![A-Za-z0-9_])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
 			_Z = r"(?![A-Za-z0-9_])"
 			_K = r"(?:(?<![A-Za-z0-9_.-])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
+			_J = r"(?:(?<![A-Za-z0-9_-])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
 			_KEY = r"(?:PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIALS?)"
-			SECRET_KEY = re.compile(r"(?i)[A-Za-z0-9_.-]*" + _KEY + r"[A-Za-z0-9_.-]*")
+			SECRET_KEY = re.compile(r"(?i)(?=[A-Za-z0-9_.-]*?" + _KEY + r")[A-Za-z0-9_.-]++")
 
 			def _rd04_repl(m):
 			    v = m.group(2)
@@ -69,7 +70,7 @@ design: {
 			    ("RD-08", re.compile(_A + r"(?:AKIA|ASIA)[0-9A-Z]{16}" + _Z), REDACTED),
 			    ("RD-09", re.compile(_A + r"xox[abposr]-[A-Za-z0-9-]{10,}"), REDACTED),
 			    ("RD-10", re.compile(_A + r"AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"), REDACTED),
-			    ("RD-11", re.compile(_A + r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), REDACTED),
+			    ("RD-11", re.compile(_J + r"eyJ[A-Za-z0-9_-]{5,}+\.[A-Za-z0-9_-]++\.[A-Za-z0-9_-]*+"), REDACTED),
 			)
 
 			def redact_text(text):
@@ -121,12 +122,13 @@ design: {
 			| RD-03 | `Bearer` の後の値 | 大小を問わない |
 			| RD-04 | 秘密の名前の鍵の値（文の層） | 鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` などを含み（大小を問わない）、`=` か `:` が続く。鍵の前後の引用符は、なし・`"`・`'`・`\"` のどれでもよい。値が `\"…\"`・`"…"`・`'…'` なら、引用の中だけを `[伏せた]` にして引用符を残す。引用の中のエスケープ（`"…"` と `'…'` の中の `\"`・`\'`・`\\`、`\"…\"` の中の `\\\"`・`\\\\`・`\\n` など）は値の一部として読み、値の終わりと取り違えない。閉じの引用がなければ、引用のない値として行の末尾まで伏せる。引用がなければ、行の末尾まで伏せる（`}`・`]`・`,`・文字の `\n` では止まらない）。値が空、または ASCII のスペースとタブだけなら変えない（CR や全角の空白だけの値は値として `[伏せた]` にする。伏せすぎで漏れはない）。`[伏せた]` を `[伏せた]` に置き換えても同じなので、特別な扱いはしない |
 			| RD-02・RD-04 の書き出し | 処理の時間 | 書き出しの位置を区切りに限る（RD-02 はスキームの前が英数字・`+.-` でない、RD-04 は鍵の前が英数字・`_.-` でない、またはエスケープの直後。引用符や `\\` の直後の鍵、`b'password=…'` も当たる）。RD-04 の鍵は、先読みで秘密の名前を含むかを確かめてから、鍵の文字の並びを戻らずに読む（所有の量指定子 `++`）ので、`token` を繰り返すような並びでも探し直さない。時間は入力の長さにほぼ比例する（F-06） |
+			| `SECRET_KEY`・RD-11 | 処理の時間 | JSONの鍵の判定 `SECRET_KEY` も、RD-04 の鍵と同じく先読みで秘密の名前を確かめてから戻らずに読む。RD-11（JWT）は、書き出しを JWT の文字（英数字・`_-`）の直後でない位置（またはエスケープの直後）に限り、各部分を所有の量指定子で読む（F-06） |
 			| RD-05〜RD-11 | 形で分かるトークン | 前を ASCII の英数字・`_` で区切る。`\uXXXX`・`\n` などのエスケープの直後も区切りとみなす（日本語の隣でも当たる） |
 
 			- 冪等：`[伏せた]` は RD-04 以外の規則に当たらず、RD-04 は `[伏せた]` を同じ `[伏せた]` に置き換える。JSONの結果は、JSONの層が同じ形に書き直す。文の層の結果がJSONになる場合も、1回目からJSONの層で整える。
 			- RD-04 は `PASSWORD=`・`TOKEN=`・`SECRET=` の行（epic-00004 の F-02）を広げたもの。`max_tokens` のような秘密でない値も伏せる（伏せすぎは受け入れ、閉じる側に倒す）。文の層の引用のない値は行の末尾まで伏せる（同じ行の後ろの文も、JSONとして読めない文の中の文字の `\n` の後ろも消えるが、秘密を残さない側に倒す）。1行のJSONの全体は、JSONの層が鍵ごとに伏せるので、ほかの鍵と値は残る。
 			- 確かめた例（タスク担当、Python 3.12、2026-11-26。すべて漏れなし・冪等）：`json.dumps` した「トークン」の直後の `ghp_` のトークン・`AKIA` のID・`sk-` の鍵。会話の本文に入れた `json.dumps({"password": "DUMMY\"EXAMPLE", "user": "demo"})` を、さらに外側のJSONに入れたもの（`password` の値だけが伏せられ、`user` とほかの出来事が残り、結果がJSONとして読める）。`DB_PASSWORD=DUMMY]EXAMPLE`・`DB_PASSWORD=Ab}9xQ2`（値の全体）。`{"password": "…", "title": "keep"}`（`"password": "[伏せた]"`、`title` が残り、JSONとして読める）。JSONの文字列の中の `PASSWORD=…\nnormal line`（`normal line` が残る）。`payload: {"api_token": "…", "title": "keep"}` のような文の中のJSON（値だけ）。閉じのない `"password": "abc`。JSONとして読めない、エスケープの残った文 `{\"password\": \"…\"`。2回目の仕様レビューの後に足した例：鍵に入った `ghp_` のトークン（文字列の中のJSONの鍵も）、`PASSWORD=[伏せた]DUMMY_EXAMPLE`、文字の `\n` を含む `PASSWORD=DUMMY\nEXAMPLE`（文のままと、JSONの文字列の中）、不正なエスケープで読めない `{"password":"a\qb","x":1}`（1回目からJSONに整い、2回目も同じ）。合わせて21例。
-			- 最終品質ゲートの後に足した例（タスク担当、Python 3.12、2026-11-26）：`'payload: ' + json.dumps(json.dumps({'password': 'DUMMY"EXAMPLE'}))[1:-1]`（エスケープの残った引用の中の `\\\"`）、同じ形で値に `\\` を含むもの、`PASSWORD='it\'sEXAMPLE' tail`、`echo "PASSWORD=DUMMY"`、文字の `\n` の直後の `PASSWORD=`。系列2の2回目の仕様レビューの後に足した例：`b'password=DUMMY'`、`{u'password': u'DUMMY'}`、`r"token: DUMMY"`、`\\password=DUMMY`、`my_api_token = DUMMY`、`db.password: DUMMY`。合わせて34例で漏れなし・冪等。英字・`-`・`.`・`_`・`\\`・`"`・`'`・`a-`・`a:`・`token`・`TOKEN_`・`secret.`・`password=`・`eyJ`・`xoxb-`・`ghp_`・`bearer `・`-----BEGIN `・`\\u30f3`・`\\n`・`https://` の繰り返しの 64,000 文字と 256,000 文字の連続文字列が、どれも0.11秒未満。
+			- 最終品質ゲートの後に足した例（タスク担当、Python 3.12、2026-11-26）：`'payload: ' + json.dumps(json.dumps({'password': 'DUMMY"EXAMPLE'}))[1:-1]`（エスケープの残った引用の中の `\\\"`）、同じ形で値に `\\` を含むもの、`PASSWORD='it\'sEXAMPLE' tail`、`echo "PASSWORD=DUMMY"`、文字の `\n` の直後の `PASSWORD=`。系列2の2回目の仕様レビューの後に足した例：`b'password=DUMMY'`、`{u'password': u'DUMMY'}`、`r"token: DUMMY"`、`\\password=DUMMY`、`my_api_token = DUMMY`、`db.password: DUMMY`。合わせて34例で漏れなし・冪等。英字・`-`・`.`・`_`・`\\`・`"`・`'`・`a-`・`a:`・`token`・`TOKEN_`・`secret.`・`password=`・`eyJ`・`xoxb-`・`ghp_`・`bearer `・`-----BEGIN `・`\\u30f3`・`\\n`・`https://` の繰り返しの 64,000 文字と 256,000 文字の連続文字列が、どれも0.11秒未満。系列2の3回目の仕様レビューの後に、時間を総当たりで確かめた：29の書き出し（`eyJ`・`eyJa`・`sk-`・`xoxb-`・`ghp_`・`github_pat_`・`AKIA`・`AIza`・`bearer `・`https://`・`u:p@`・`-----BEGIN `・`-----BEGIN RSA `・`PRIVATE KEY-----`・`password`・`PASSWORD=`・`TOKEN`・`token:`・`"password":`・`\"token\":`・`\u30f3`・`\n`・`a`・`0`・`[伏せた]`・`{`・`[`・`{"a":`・`[1,`）×14の区切り（なし・`-`・`_`・`.`・`:`・空白・`/`・`@`・`"`・`'`・`\`・`=`・`!`・`a1`）の繰り返しを、文、JSONの鍵（末尾に `!`）、JSONの値、文字列の中のJSONの鍵の4つの形で渡し、32,000 文字で最悪0.124秒、128,000 文字で最悪0.230秒（4倍の長さで約2倍。2乗の形はない）。JWT の例（`auth eyJ….….… end`、日本語の隣、短いJWT）を足して38例で漏れなし・冪等。
 			- 限界：規則に当てはまらない形の秘密は伏せられない（risks）。
 			"""#
 		satisfies: ["R-02", "F-03", "F-06"]
