@@ -1,0 +1,58 @@
+[
+  {
+    "number": 101,
+    "title": "架空のIssue 101",
+    "state": "CLOSED",
+    "createdAt": "2026-11-25T15:00:00Z",
+    "closedAt": "2026-11-26T10:00:00Z",
+    "url": "https://github.com/example-org/demo-app/issues/101"
+  },
+  {
+    "number": 102,
+    "title": "架空のIssue 102",
+    "state": "OPEN",
+    "createdAt": "2026-11-26T14:59:59Z",
+    "closedAt": null,
+    "url": "https://github.com/example-org/demo-app/issues/102"
+  },
+  {
+    "number": 103,
+    "title": "架空のIssue 103",
+    "state": "OPEN",
+    "createdAt": "2026-11-25T14:59:59Z",
+    "closedAt": null,
+    "url": "https://github.com/example-org/demo-app/issues/103"
+  },
+  {
+    "number": 104,
+    "title": "架空のIssue 104",
+    "state": "OPEN",
+    "createdAt": "2026-11-26T15:00:00Z",
+    "closedAt": null,
+    "url": "https://github.com/example-org/demo-app/issues/104"
+  },
+  {
+    "number": 105,
+    "title": "架空のIssue 105",
+    "state": "OPEN",
+    "createdAt": "2026-11-26T00:00:00Z",
+    "closedAt": null,
+    "url": "https://github.com/example-org/demo-app/issues/105"
+  },
+  {
+    "number": 106,
+    "title": "架空のIssue 106",
+    "state": "OPEN",
+    "createdAt": "2026-11-26T00:00:00Z",
+    "closedAt": null,
+    "url": "https://github.com/example-org/demo-app/issues/106"
+  },
+  {
+    "number": 107,
+    "title": "架空のIssue 107",
+    "state": "OPEN",
+    "createdAt": "2026-11-25T14:59:59Z",
+    "closedAt": "2026-11-26T03:00:00Z",
+    "url": "https://github.com/example-org/demo-app/issues/107"
+  }
+]
