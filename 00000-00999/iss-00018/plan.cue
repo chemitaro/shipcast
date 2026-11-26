@@ -11,7 +11,7 @@ steps: {
 		"""
 		realizes: ["R-01", "R-02", "R-03"]
 		session:  "impl-ui"
-		status:   "todo"
+		status:   "doing"
 	}
 	"S-02": {
 		title: "置き場を歩く関数と道筋、起動の表示とREADME、ブラウザーでの確かめ"
