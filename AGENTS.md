@@ -1,6 +1,6 @@
 # shipcast エージェント契約
 
-shipcastは、開発の成果から外への発信の下書き（X・note・Redditなど）を作る道具です。このGit repositoryは**public**です。構想と決定の経緯は`content/`にあります。
+shipcastは、ソフトウェアファクトリーの時代の開発者のための、エージェントが書く開発日誌の道具です。おまけとして、ネタポイントがたまるとX・note・Redditなどへの発信の下書きを作ります。このGit repositoryは**public**です。構想と決定の経緯は`content/`にあります。
 
 物理的にはCompany OSの`tools/shipcast/`に置いていますが、独立したGit repositoryです（GitHub: `chemitaro/shipcast`）。親のCompany OSの`AGENTS.md`はCompanyの文脈として読み、このrepositoryでの作業はこのファイルに従います。
 
