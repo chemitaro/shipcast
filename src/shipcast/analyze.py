@@ -37,7 +37,7 @@ def analyze(
     repo_id: str,
     day: date,
 ) -> list[Story]:
-    """その日の出来事を分析し、応答順の話題を返す。"""
+    """その日の出来事を分析し、応答順の話題を保存して返す。"""
     # 空の入力でも repo_id と day を story_id と同じ規則で検査する。
     story_id(repo_id, day, ("",))
     for event in events:
@@ -46,6 +46,7 @@ def analyze(
     if not events:
         return []
 
+    store.add_events(events)
     system = _read_prompt()
     payload = {
         "repo": repo_id,
@@ -68,7 +69,7 @@ def analyze(
         response = route.complete(prompt, system=system, want_json=True)
         values, errors = parse_stories(response, event_ids=event_ids)
         if not errors:
-            return [
+            stories = [
                 Story(
                     id=story_id(repo_id, day, story["event_ids"]),
                     repo_id=repo_id,
@@ -77,6 +78,8 @@ def analyze(
                 )
                 for story in values
             ]
+            store.save_stories(stories)
+            return stories
     raise AnalyzeFailed(MAX_ATTEMPTS, errors)
 
 

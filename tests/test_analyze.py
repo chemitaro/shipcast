@@ -286,6 +286,8 @@ def test_analyze_reports_only_last_shape_errors(events, store):
     assert caught.value.errors[0].startswith("stories[0].what:")
     assert str(caught.value).startswith("分析の応答が2回とも決まった形になりませんでした")
     assert MARKER not in str(caught.value)
+    assert store.stories_for(REPO, DAY) == []
+    assert store.events_for(REPO, DAY, tz=UTC) == events
 
 
 def test_analyze_propagates_route_failure_without_retry(events, store):
@@ -301,6 +303,31 @@ def test_analyze_propagates_route_failure_without_retry(events, store):
 
     assert caught.value is failure
     assert len(calls) == 1
+    assert store.stories_for(REPO, DAY) == []
+    assert store.events_for(REPO, DAY, tz=UTC) == events
+
+
+@pytest.mark.parametrize("already_collected", [False, True])
+def test_analyze_persists_events_before_request_and_stories_before_return(
+    events, store, already_collected
+):
+    if already_collected:
+        assert store.add_events(events) == len(events)
+    assert store.stories_for(REPO, DAY) == []
+
+    def respond(prompt, system, want_json):
+        assert store.events_for(REPO, DAY, tz=UTC) == events
+        return response_text(
+            story_response(title="補足", event_ids=["sample-b"]),
+            story_response(neta={"score": 2}, event_ids=["sample-a", "sample-c"]),
+        )
+
+    stories = analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY)
+    assert len(stories) == 2
+    assert store.stories_for(REPO, DAY) == stories
+    assert store.events_for(REPO, DAY, tz=UTC) == events
+    assert store.runs_for(REPO) == []
+    assert store.unconsumed_neta(REPO) == []
 
 
 def reject_call(*args):
