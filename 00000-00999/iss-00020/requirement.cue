@@ -4,7 +4,7 @@ schema: "specdock/v1"
 
 assurance: {
 	level:  "light"
-	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る"
+	reason: "手元に下書きのファイルを作るだけで、投稿はしない（本人が行う）。誤っても下書きを消せば元に戻る"
 }
 
 purpose: "`shipcast draft x` で、Xの投稿の下書きを手元に作る。投稿はしない。"

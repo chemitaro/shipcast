@@ -4,7 +4,7 @@ schema: "specdock/v1"
 
 assurance: {
 	level:  "light"
-	reason: "手元だけの新しい道具の一部で、PRを戻せば元に戻る"
+	reason: "iss-00017 の包み方と道筋の上に、表紙と一覧のMarkdownを組むだけで、影響は2つのページに閉じる。読むだけで日誌を変えず、PRを戻せば元に戻る"
 }
 
 purpose: "表紙（全repositoryの最新）と、repositoryごとの日付の一覧を、Markdownで作って同じ包み方で描く。"

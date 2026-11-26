@@ -7,6 +7,8 @@ steps: {
 
 tests: {
 	"T-01": {title: "plistに3時、shipcastの絶対path、ログの置き場が入る", verifies: ["R-01"]}
+	"T-02": {title: "uninstall がplistを消し、ないときも誤りにしない（一時のフォルダーで）", verifies: ["R-02"]}
+	"T-03": {title: "READMEに導入・登録・外し方・許可の節がある", verifies: ["R-03"]}
 }
 
 execution: sessions: {
