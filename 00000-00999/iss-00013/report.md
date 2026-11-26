@@ -38,6 +38,7 @@ ID: "iss-00013"
 ## Verification
 
 - 開始のコミットの基準：219 passed。合格のコミットで `test_commands` すべて0（234 passed）。`orca` のない `PATH` でも 234 passed（実装担当の報告）。
+- CI：PR #28（https://github.com/chemitaro/shipcast/pull/28）で GitHub Actions `ci`（run 45818226869、job `test`）が `e157d9f` に対して success。observer の exit 0、OBSERVED_CI_PASS、merge_readiness READY（2026-11-26T12:18:26Z）。
 - 見本と差分に実際のOrcaの記録（手元のpath、本物のセッションID・repository名）がないことを、タスク担当が `git diff` の検索で確かめた。
 
 ## 逸脱と判断

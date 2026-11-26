@@ -11,7 +11,7 @@ steps: {
 		"""
 		realizes: ["R-01", "F-03"]
 		session:  "impl-ui"
-		status:   "todo"
+		status:   "done"
 	}
 	"S-02": {
 		title: "道筋の読み取り、パスの検査、ヘッダー、Hostの検査の関数"
