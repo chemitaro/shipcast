@@ -37,6 +37,7 @@ design: {
 
 		- 守ったMarkdown：`re.compile(r"</(script)", re.IGNORECASE | re.ASCII)` で `</script` を `<\\/script`（元の大小の字はそのまま）に置き換えたもの。`<!--` は置き換えない。HTMLのトークナイザーと ds.js の戻し（`/<\\\\\\/script/gi`）はASCIIの大小だけを同じとみなすので、`re.ASCII` で揃える（`ſ`・`K` などの字を巻き込まない）。
 		- 末尾の `\\n<!-- -->\\n`：本文の終わりでトークナイザーが script data state・escaped・double escaped のどれにいても、先頭の改行で途中の状態がこの3つのどれかに落ち着き、`<!--` と ` -->` を通って script data state に戻る。そのため次の `</script>` が必ず `ds-source` を閉じる。Markdownでは見えないHTMLのコメントになる（本文が閉じていないコードの囲みで終わるときだけ、コードの中に `<!-- -->` が見える。報告の残りのリスク）。
+		- 保たれない変換（ds.js とHTMLの仕様による。避けられない）：本文に元からある `<\\/script`（バックスラッシュ付き）は、ds.js の戻しで `</script` として描かれる。HTMLの入力の処理で、CR・CRLF は LF に、NUL は U+FFFD になる。R-01 の「元に戻る」は、これらを含まない日誌について言う。
 		- `title` は `html.escape(title, quote=True)`。`<title>` はRCDATAなので、`</title>` を含む題名もエスケープで閉じない。ds.js も前付けの `title` で `document.title` を上書きする（どちらも文字として扱う）。
 		- 日誌の中身はそのまま（前付けを含む）入れる。ds.js が前付けの `title`・`lead`・`category` をページの頭に描く。`ds.js` が `</SCRIPT` を小文字の `</script` に戻すので、大小の字は描くときに小文字になる（意味は変わらない）。
 		- `<link rel="icon" href="data:,">` で、ブラウザーの `/favicon.ico` の要求を出さない。
@@ -61,7 +62,7 @@ design: {
 	"D-03": {
 		title: "道筋の読み取りとパスの検査（`shipcast.serve` のロジック）"
 		text: """
-		- `split_path(target: str) -> tuple[str, ...] | None`：要求の対象から `?` と `#` の後ろを外し、`/` で始まらなければ `None`。`urllib.parse.unquote(path, errors="strict")` で1回だけ復号し（UTF-8で読めなければ `None`）、復号した後の文字列にNUL・バックスラッシュがあれば `None`。`/` で分け、先頭の空を除いた部分のどれかが空・`.`・`..`・`.` で始まるなら `None`。`/` だけは `()`。
+		- `split_path(target: str) -> tuple[str, ...] | None`：要求の対象から `?` と `#` の後ろを外し、`/` で始まらなければ `None`。`/` だけは `()`。それ以外は、**復号する前に** 生の `/` で分け（先頭の空を除く）、部分ごとに `urllib.parse.unquote(part, errors="strict")` で1回だけ復号する（UTF-8で読めなければ `None`）。復号した部分のどれかが空・`.`・`..`・`.` で始まる、または `/`（`%2f`）・バックスラッシュ（`%5c` を含む）・NULを含むなら `None`。符号化した区切り（`%2f`・`%5c`）は、置き場の中を指していても受けない（親 epic-00005 の F-02）。
 		- `resolve_inside(root: Path, parts: Sequence[str]) -> Path | None`：`base = root.resolve()`、`candidate = base.joinpath(*parts).resolve()`。`candidate.is_relative_to(base)` なら `candidate`、でなければ `None`。ファイルの有無は見ない（呼ぶ側が `is_file()` を確かめる）。日誌とデザインシステムの両方で、この関数だけを使う。
 		- 道筋：
 		  - `("_ds", *rest)`（`rest` が1つ以上）→ デザインシステムの置き場の `resolve_inside` → 普通のファイルで、拡張子が下の表にあれば200、ほかは404。
@@ -106,7 +107,7 @@ design: {
 		title: "Hostの検査 `host_allowed(host: str | None) -> bool`"
 		text: """
 		- `None`・空なら `False`。`[…]:port`・`name:port` からポートを外し、小文字にする。
-		- `True` になるもの：`ipaddress.ip_address` で読めるもの（`[::1]` は角かっこを外して読む）、`localhost`、`.ts.net` で終わる名前、点のない1語の名前（英数字と `-`）。ほかは `False`。
+		- `True` になるもの：`ipaddress.ip_address` で読めるもの（`[::1]` は角かっこを外して読む）、`localhost`、`.ts.net` で終わる名前（英数字・`-`・`.` だけ）。ほかは `False`。点のない1語の名前（MagicDNSの短い名前など）は受けない：OSのDNSの検索ドメインで外の名前空間の名前に解決されうるので、付け替えの攻撃に使われうる（仕様レビュー round 2 の ChatGPT の P1）。`tailscale serve` で読むときのHostは `.ts.net` の名前か、中継の `127.0.0.1` になる。
 		- ハンドラーは、道筋を読む前に確かめ、`False` なら400（本文は短い文字）を返し、ファイルを読まない。
 		- 理由：DNSの付け替えの攻撃では、外のWebページの名前（点を含む外の名前）がHostに入る。IPの書き方とtailnetの名前は、外のページが自分のものとして使えない。
 		"""
