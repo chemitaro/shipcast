@@ -10,25 +10,122 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00019 ネタポイントを数えて日誌に印を付ける
-lead: 話題のネタポイントを台帳にため、しきい値を超えた日の日誌に「発信の芽」の囲みを足します。
+lead: 話題を保存するたびにネタポイントを台帳へ一度だけ足し、未消化の合計がしきい値以上の日の日誌の末尾に「発信の芽」の囲みを出します。
 category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+audience: このIssueを初めて読む人、実装を担当するエージェント、レビューする人
+status: 仕様を確定（レビュー待ち）
 ---
 
 ## このIssueで作るもの
 
-話題のネタポイントを台帳にため、しきい値を超えた日の日誌に「発信の芽」の囲みを足します。親のE5の説明資料に、全体の約束と背景があります。
+shipcast は、毎日の開発の出来事を「話題」にまとめて日誌を書きます。分析のモデルは、各話題に **ネタポイント**（0〜3点。外へ発信する値打ちの目安）を付けます。このIssueでは、次の2つを作ります。
+
+1. 話題を保存するとき、そのネタポイントを repository ごとの **台帳** に足す。同じ話題は二度足さない。
+2. 台帳の **未消化の合計**（残高）が設定のしきい値（`neta.threshold`、既定6）**以上** の日に、日誌の末尾に「発信の芽」の囲みを出す。
 
 :::summary 確かめる点
-- しきい値を超えた日にだけ囲みが出る
+- 話題を保存し直しても、点数は二重に足されない
+- 残高がしきい値以上の日だけ、日誌の最後に `:::tip 発信の芽（ネタポイント N）` の囲みが出る
+- 囲みに生のHTMLが入らない
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`light`** です。「発信の芽」は、iss-00016 の拡張点に部品を1つ登録して出します。そのため iss-00016 の後に始めます。
+これは親の epic-00006（E5 おまけ）の R-01・R-02 です。話題を「消化」すること（Xの下書きを作って残高を減らすこと）は、次の iss-00020 が受け持ちます。
+
+:::note 保証レベル
+保証レベルは **`light`** です。外へは何も送らず、誤っても印が出ない・出すぎるだけで、PRを戻せば元に戻ります。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+## 言葉
+
+| 言葉 | 意味 |
+|---|---|
+| 話題（`Story`） | 分析のモデルが、その日の出来事をまとめた単位。id は、含む出来事の組から決まる |
+| ネタポイント | 話題の `neta.score`（0〜3）。外へ書く値打ちの目安 |
+| 台帳（`neta_ledger`） | 話題ごとに、点数と「消化済みか」を記録する表。iss-00010 で作り済み |
+| 残高 | その repository の未消化の点数の合計（`Store.neta_balance`） |
+| 拡張点 | 日誌の組み立ての最後に囲みを足す部品の差し込み口（iss-00016 の `JournalExtension`） |
+
+## 流れ
+
+`shipcast write` が1日の日誌を書く流れの中で、台帳への加算と印の判断は次の順に起きます。その日の話題を足した後の残高で、印を出すかを決めます。
+
+```plantuml
+@startuml
+title 日誌を書く1日の流れと台帳
+participant "shipcast write\n(run)" as Run
+participant "write_day" as Day
+participant "analyze" as Ana
+database "状態の置き場\n(Store)" as Store
+participant "NetaSprout\n(発信の芽の部品)" as Sprout
+Run -> Day : extensions=journal_extensions(store, しきい値)
+Day -> Ana : その日の出来事
+Ana -> Store : save_stories(話題)\n話題の保存と台帳への加算を1つの取引で
+Day -> Day : compose（書き手が文章を書く）
+Day -> Sprout : render(repo, 日付, 話題, 出来事)
+Sprout -> Store : neta_balance / unconsumed_stories
+alt 残高 >= しきい値
+  Sprout --> Day : :::tip 発信の芽（ネタポイント N）
+else 残高 < しきい値
+  Sprout --> Day : None（何も足さない）
+end
+Day -> Day : 日誌を組み立てて置き換える
+@enduml
+```
+
+### 1. 台帳への加算
+
+`Store.save_stories` が、話題の表への保存と **同じ取引** で、台帳にまだない話題の点数を足します。保存の後に処理が落ちても「話題はあるのに点数がない」状態になりません。
+
+- 同じ id の話題を保存し直しても（点数が変わっても）、台帳の点数と「消化済みか」は変えません。同じ日を書き直しても残高は増えません。
+- 点数0の話題も台帳に記録しますが、残高は変わりません。
+
+### 2. 「発信の芽」の囲み
+
+新しい部品 `shipcast.neta.NetaSprout` が、残高としきい値を比べます。以上なら、点数の大きい順に最大3件の題名を並べた囲みを返します。
+
+```markdown
+:::tip 発信の芽（ネタポイント 7）
+- ログの保存先を手元に切り替えた
+- 夜の処理を1本にまとめた
+:::
+```
+
+- 題名は文字参照にします（`<` は `&lt;`）。先頭の `#` や `1.` などは打ち消し、見出しや番号の列と誤って読まれないようにします（iss-00016 の申し送り「部品は生のHTMLを返さない」）。
+- 出来事のない日には、拡張点そのものが呼ばれないので、囲みは出ません。
+
+### 3. 部品の渡し方
+
+部品は台帳を読むために、状態の置き場（`Store`）としきい値を必要とします。そのため、文脈を持たない既定の一覧 `EXTENSIONS`（空のまま）には入れません。`shipcast write` の `run` が、実行のたびに `journal_extensions(store, threshold)` で `(*EXTENSIONS, NetaSprout(store, threshold))` を作り、`write_day` に渡します。`JournalExtension` の形、`build_entry`、`write_day`、`cli.py` は変えません。
+
+:::warning 並行の iss-00021 への申し送り
+`shipcast run`（iss-00021）が日誌を書くときも、同じ `journal_extensions(store, config.neta.threshold)` を `write_day` に渡せば、同じ印が出ます。渡さなければ印は出ません（日誌は壊れません）。
+:::
+
+## 失敗したとき
+
+| 起きること | 動き |
+|---|---|
+| 部品が例外を投げる（状態の置き場が読めないなど） | iss-00016 の扱いのまま。その repository のその日の日誌は書かれず、失敗として出る |
+| 同じ日を分析し直して話題の分け方が変わる | 話題の id が変わるので、別の話題として点数が足される。このIssueでは取り消さない（残る危険） |
+
+## 作らないもの
+
+- Xの下書きと消化（iss-00020）
+- `shipcast run` への配線（iss-00021。申し送りのみ）
+- 表の形、`cli.py`、`JournalExtension` の形の変更
+
+## 確かめ方
+
+試験は fake の経路と一時ディレクトリだけで行い、外部のモデルと `agy` を呼びません。
+
+| 試験 | 確かめること |
+|---|---|
+| T-01 | `save_stories` で点数が一度だけ足され、`unconsumed_stories` が点数の大きい順に返す |
+| T-02 | `analyze` の後、その話題が台帳に入り、二度目の分析で増えない |
+| T-03 | `NetaSprout` がしきい値以上でだけ囲みを返し、題名を最大3件、文字参照にして並べる |
+| T-04 | CLI の `shipcast write` で、しきい値以上の日の日誌の最後に囲みが出て、未満の日と出来事のない日には出ない |
+
+検証のコマンドは `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` の順です。要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

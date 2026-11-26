@@ -10,25 +10,190 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00021 全repositoryの日誌を一度に作る（shipcast run）
-lead: `shipcast run` で、登録した全repositoryの指定した日（既定は前日）の日誌を作ります。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
+lead: `shipcast run` 1回で、登録した全repositoryの前日の日誌を作り、repositoryごとの成功・失敗を記録します。毎晩3時の自動実行（iss-00022）の入口になるコマンドです。
+category: 説明資料（Issue・standard）
+audience: このIssueのタスク担当・実装担当、統括、後で launchd の登録（iss-00022）を作る担当、夜の失敗の記録を読む本人
 status: 仕様を確定
+updated: 2026-11-26
+docid: iss-00021
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-`shipcast run` で、登録した全repositoryの指定した日（既定は前日）の日誌を作ります。親のE6の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 1つの失敗でほかを止めない
-- 再実行で重複しない
-- 前の実行が動いていれば重ねない
+:::summary
+- `shipcast run` が、どの日の、どのrepositoryを、どの順で処理するか
+- 1つのrepositoryが失敗しても、ほかの日誌ができる仕組み
+- 実行の記録（`runs` の表）に何が残るか、終了コードの決まり
+- 前の実行がまだ動いているときに、重ねて動かさない仕組み（`run.lock`）
+- 外付けディスクを macOS の許可（TCC）で読めないときの案内
+- 同じ日を何度動かしても重複しない理由と、試験のしかた
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`standard`** です。夜の処理の入口で、全repositoryを順に動かし実行の記録を残すため、受け入れ条件と試験を全要件に付けました。
+## 背景：夜の自動実行の入口
+
+shipcastは、登録したrepositoryで1日に起きたことを、開発日誌のMarkdownにします。日誌づくりの部品は、すでに `main` にそろっています。
+
+:::cards cols=3
+### 集める {badge=collect_repo}
+Git・SpecDock・Orcaから、その日の出来事を集めて状態に保存します。
+
+### まとめて書く {badge=write_day}
+出来事を話題にまとめ、書き手のモデルに文章を書かせ、日誌のファイルに置き換えます。
+
+### 夜に回す {badge=iss-00021}
+全repositoryに上の2つを順に呼び、結果を記録します。**このIssue**です。
 :::
+
+親の E6（epic-00007）の目標は「毎晩3時に、本人の手を借りずに前日の日誌ができる」ことです。3時の起動は launchd（iss-00022）が受け持ち、このIssueは、起動されたときに動く `shipcast run` を作ります。
+
+:::note `shipcast write` との違い
+| | `shipcast write` | `shipcast run` |
+|---|---|---|
+| 既定の日 | 今日 | **前日**（設定の時間帯で） |
+| 実行の記録（`runs`） | 書かない | repositoryごとに1行書く |
+| 重ねての実行 | 防がない | `run.lock` で防ぐ |
+| TCC の案内 | なし | 誤りに添える |
+
+並行して進む iss-00019 が `write.py` を変えうるので、このIssueは `write.py` を変えず、新しい `run.py` に書きます。
+:::
+
+## 使い方
+
+```sh
+shipcast run                          # 全repositoryの前日
+shipcast run --date 2026-11-20        # 日を指定
+shipcast run --repo demo-app          # 1つのrepositoryだけ
+```
+
+前日は、設定の `timezone`（既定 `Asia/Tokyo`）の暦で決めます。たとえば 2026-11-26 の3時に動くと、2026-11-25 の日誌を作ります。
+
+## 全体の流れ
+
+```plantuml id=flow
+@startuml
+title shipcast run の流れ
+start
+:設定を読む;
+:日を決める（--date か前日）;
+:repositoryを選ぶ（--repo か全部）;
+if (登録にない／0件?) then (はい)
+  :直し方を出す;
+  stop
+endif
+if (run.lock を取れる?) then (いいえ)
+  :「前の実行が動いている」と出す;
+  note right: 終了コード0。何も書かない
+  stop
+endif
+:状態（Store）を開く;
+if (モデルの経路を作れる?) then (いいえ)
+  :全repositoryを failed で記録;
+  stop
+endif
+repeat :次のrepository;
+  :収集（collect_repo）;
+  if (収集に誤り?) then (はい)
+    :failed（日誌は書かない）;
+  else (いいえ)
+    :まとめて書く（write_day）;
+    :ok（例外なら failed）;
+  endif
+  :runs に1行を記録;
+repeat while (まだある?)
+:lock を外す;
+:成功と失敗の件数を出す;
+stop
+@enduml
+```
+
+## 終了コードと記録
+
+:::cards cols=3
+### 0 {badge=成功}
+処理したrepositoryが全部 `ok`。または、前の実行が動いていて、今回は何もしなかった。
+
+### 1 {badge=失敗あり}
+1つでも `failed`、または入口の誤り（設定が読めない、登録にない id、状態の置き場が開けない）。
+
+### 2 {badge=引数}
+引数の誤り（`--date` が日付でないなど）。argparse が出します。
+:::
+
+`runs` の表には、処理したrepositoryごとに1行が足されます。
+
+| 列 | 中身 |
+|---|---|
+| `repo_id` | repositoryのid |
+| `started_at`・`finished_at` | そのrepositoryの処理の始まりと終わり（時間帯つき） |
+| `result` | `ok` か `failed` |
+| `error` | 失敗の理由（成功なら空）。TCC の失敗なら直し方を添える |
+
+:::warning 1つの失敗でほかを止めない
+収集の失敗、分析・執筆の失敗、想定外の例外のどれでも、そのrepositoryを `failed` として記録し、次のrepositoryへ進みます。前の日誌のファイルは壊れません（`write_day` の置き換えの仕組み）。`Ctrl+C` などの中断だけは受け止めずに止まります。
+:::
+
+## 重ねて動かさない：`run.lock`
+
+前の夜の実行が長引いて、次の実行と重なると、同じ日誌の置き換えや状態の書き込みが競います。そこで、状態の置き場（既定 `~/.local/state/shipcast/`）の `run.lock` を、`fcntl.flock` で排他に取ってから処理します。
+
+```plantuml id=lock
+@startuml
+participant "実行A" as A
+participant "run.lock" as L
+participant "実行B" as B
+A -> L : flock(LOCK_EX | LOCK_NB) 成功
+A -> A : 全repositoryを処理
+B -> L : flock(LOCK_EX | LOCK_NB)
+L --> B : 取れない
+B -> B : 標準エラーに1行、終了コード0
+A -> L : 処理の後に外す
+@enduml
+```
+
+- 取れなかった実行は、収集も記録もせずに、終了コード0で終わります（失敗ではないため）。記録は標準エラーの1行で、launchd がログのファイルに書きます。
+- lock はプロセスが終われば必ず外れます（異常終了でも残りません）。ファイルそのものは消しません。
+
+## 外付けディスクが読めないとき（TCC）
+
+macOS は、launchd から動くプログラムが外付けvolumeを読むことを、許可（TCC）なしでは拒みます。そのときGitの誤りには `Operation not permitted` が出ます。夜は本人が見ていないので、`runs` の誤りと標準エラーに、次の案内を添えます。
+
+:::tip 添える案内
+直し方: macOS の「システム設定」→「プライバシーとセキュリティ」→「フルディスクアクセス」で、shipcast を動かすプログラム（launchd から動かすときは `shipcast` の実行ファイル、手で動かすときはターミナル）を許可してください
+:::
+
+許可を付けるのは本人です。shipcastは案内を出すだけで、設定を変えません。
+
+## 同じ日を何度動かしても重複しない
+
+新しい仕組みは足さず、既存の部品の性質で満たします。
+
+| もの | 2回目の動き |
+|---|---|
+| 出来事（`events`） | 同じidは入らない（`INSERT OR IGNORE`）。件数は増えない |
+| 日誌のファイル | 書き直して置き換える（`generated_at` が新しくなる） |
+| 日誌の記録（`entries`） | repositoryと日で1行を上書き |
+| 実行の記録（`runs`） | 実行の履歴なので、実行ごとに足される |
+
+## 作る順番と試験
+
+:::steps
+### S-01 コマンドと記録
+`run.py` の `configure`・`run`・`previous_day` と `cli.py` の接続。前日の決め方、2件のrepositoryの成功、1つの失敗でほかを止めないこと、入口の誤りを試験します（T-01〜T-04）。
+
+### S-02 lock と TCC
+`run_lock` と `with_tcc_hint`。lock を持った状態で何もせず0で終わること、中断の後にも lock が外れること、TCC の案内が付くことを試験します（T-05〜T-07）。
+
+### S-03 再実行
+同じ日を2回動かして、出来事が増えず、日誌が置き換わることを試験します（T-08）。
+:::
+
+試験は、モデルの経路を `fake`（決まった応答を返す偽物）にし、偽の collector と一時ディレクトリだけで行います。外部のモデルも `agy` も呼びません。本物の経路と外付けディスクでの確かめは、本人の手動の実行です。
+
+## このIssueでしないこと
+
+- launchd の登録とログのファイルの置き場（iss-00022）
+- `write.py`・`state.py` など既存のmoduleと、`runs` の表の形の変更
+- フルディスクアクセスを自動で付けること
 
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
