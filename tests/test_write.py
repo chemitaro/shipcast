@@ -722,14 +722,16 @@ path = "{tmp_path / "other-app"}"
     class Collector:
         name = "git"
         failure = None
+        extra_events = ()
 
         def collect(self, repo, day, tz):
             assert tz.key == "Asia/Tokyo"
             if repo.id == self.failure:
                 raise CollectError("試験用の収集エラー")
+            if day != DAY:
+                return CollectResult()
             event = _event(f"{repo.id}-commit", repo_id=repo.id)
-            assert event.at.date() == day
-            return CollectResult((event,), ("試験用の収集警告",))
+            return CollectResult((event, *self.extra_events), ("試験用の収集警告",))
 
     class FixedDatetime(datetime):
         @classmethod
@@ -758,6 +760,75 @@ def test_write_cli_exposes_repo_and_date_options(capsys):
     assert captured.value.code == 0
     stdout = capsys.readouterr().out
     assert "--repo ID" in stdout and "--date YYYY-MM-DD" in stdout
+
+
+def test_journal_extensions_appends_sprout_to_current_defaults(tmp_path, monkeypatch):
+    from shipcast import write
+    from shipcast.neta import NetaSprout
+    from shipcast.state import Store
+
+    class Extension:
+        def render(self, repo_id, day, stories, events):
+            return None
+
+    earlier = Extension()
+    monkeypatch.setattr(write, "EXTENSIONS", (earlier,))
+    with Store(tmp_path) as store:
+        extensions = write.journal_extensions(store, 6)
+        assert extensions[:-1] == (earlier,)
+        assert isinstance(extensions[-1], NetaSprout)
+
+
+def test_write_cli_appends_sprout_only_on_active_day_at_threshold(
+    tmp_path, monkeypatch, write_cli
+):
+    from shipcast import write
+    from shipcast.cli import main
+    from shipcast.model import journal_path, parse_journal
+
+    existing_block = ":::tip 既存の拡張点\n見本\n:::"
+
+    class Extension:
+        def render(self, repo_id, day, stories, events):
+            return existing_block
+
+    monkeypatch.setattr(write, "EXTENSIONS", (Extension(),))
+    journal_dir, collector, replies = write_cli
+    collector.extra_events = (_event("demo-app-review"),)
+
+    def scored_reply(prompt, system, want_json):
+        response = json.loads(_analysis_reply(prompt, system, want_json))
+        response["stories"][0]["neta"]["score"] = 2
+        return json.dumps(response, ensure_ascii=False)
+
+    replies["fake-analyst"] = scored_reply
+    config = tmp_path / "config.toml"
+    base_config = config.read_text(encoding="utf-8")
+
+    def configure_threshold(threshold):
+        config.write_text(f"{base_config}\n[neta]\nthreshold = {threshold}\n", encoding="utf-8")
+
+    def write_journal(day):
+        assert main(["write", "--repo", REPO, "--date", day.isoformat()]) == 0
+        return parse_journal(journal_path(journal_dir, REPO, day).read_text(encoding="utf-8"))[1]
+
+    configure_threshold(3)
+    blocks = write_journal(DAY).rstrip().split("\n\n")
+    assert blocks[-1] == (
+        ":::tip 発信の芽（ネタポイント 3）\n"
+        "- 今回の話題 demo-app-review\n"
+        "- 今回の話題 demo-app-commit\n"
+        ":::"
+    )
+    assert blocks[-2] == existing_block
+    assert blocks[-3].startswith(":::metrics\n")
+
+    monkeypatch.setattr(write, "EXTENSIONS", ())
+    configure_threshold(4)
+    assert ":::tip" not in write_journal(DAY)
+
+    configure_threshold(3)
+    assert ":::tip" not in write_journal(DAY.replace(day=27))
 
 
 @pytest.mark.parametrize("selected", [True, False])

@@ -31,6 +31,7 @@ from shipcast.model import (
     write_frontmatter,
 )
 from shipcast.models import RouteError, get_route
+from shipcast.neta import NetaSprout
 from shipcast.state import StateError, Store
 
 MAX_ATTEMPTS = 2
@@ -216,6 +217,10 @@ class JournalExtension(Protocol):
 
 
 EXTENSIONS: tuple[JournalExtension, ...] = ()
+
+
+def journal_extensions(store: Store, threshold: int) -> tuple[JournalExtension, ...]:
+    return (*EXTENSIONS, NetaSprout(store, threshold))
 
 
 def build_entry(
@@ -428,6 +433,7 @@ def run(args: argparse.Namespace) -> int:
                     analyst=analyst,
                     writer=writer,
                     now=datetime.now(tz),
+                    extensions=journal_extensions(store, config.neta.threshold),
                 )
             except (
                 AnalyzeFailed,
