@@ -4,14 +4,14 @@ goal: "新しい `schedule.py` に、ファイルにも `launchctl` にも触れ
 
 steps: {
 	"S-01": {
-		status:   "doing"
+		status:   "done"
 		title:    "plist の組み立てと実行ファイルの見つけ方（`build_plist`・`nightly_environment`・`find_program`）"
 		text:     "D-01・D-02。T-01・T-02・T-03 を `tests/test_schedule.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/schedule.py` に定数・`ScheduleError`・`build_plist`・`nightly_environment`・`find_program` を書いて通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "F-01"]
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "todo"
+		status:   "done"
 		title:    "`schedule install`・`uninstall` のCLIと `launchctl` の呼び出し、`cli.py` の接続"
 		text:     "D-03・D-04・D-05・D-06。T-04〜T-07 を先に書いて Red、`configure_install`・`install`・`configure_uninstall`・`uninstall`・`launchctl`・`load`・`unload`・`plist_path`・`gui_domain`・`interpreter_path` を書き、`cli.py` の2つの葉をつなぎ、`tests/test_cli.py` の未実装の一覧から2行を外して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02", "F-01", "F-02"]
@@ -19,7 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
-		status:   "todo"
+		status:   "done"
 		title:    "`shipcast run` の拡張点を台帳につなぎ、TCC の案内の対象を合わせる（`journal_extensions_for`・`_TCC_HINT`）"
 		text:     "D-07。T-08・T-10 を先に書いて Red（今の `None` では落ちる）、`journal_extensions_for` を `journal_extensions(store, config.neta.threshold)` にし、`_TCC_HINT` の文を直し、既存の `tests/test_run.py` の `[None]` の確かめを直して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-04", "R-05"]
@@ -27,7 +27,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-04": {
-		status:   "todo"
+		status:   "done"
 		title:    "README の導入と毎晩の実行の節"
 		text:     "D-08。T-09 を `tests/test_readme.py` に先に書いて Red、README に節を書いて Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-03"]
