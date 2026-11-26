@@ -66,7 +66,6 @@ def test_module_help_matches_cli_help(capsys):
 @pytest.mark.parametrize(
     ("command", "issue_id"),
     [
-        ("write", "iss-00016"),
         ("run", "iss-00021"),
         ("draft x", "iss-00020"),
         ("schedule install", "iss-00022"),

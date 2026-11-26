@@ -61,6 +61,7 @@ def test_parse_draft_rejects_invalid_json_or_non_object(text, location):
         ("lead", None, "lead"),
         ("lead", " \t ", "lead"),
         ("lead", "応答の目印\n本文", "lead"),
+        ("lead", "応答の目印\n", "lead"),
         ("lead", "応答の目印" * 40 + "あ", "lead"),
         ("lead", "応答の目印 <!--", "lead"),
         ("lead", 1, "lead"),
@@ -70,6 +71,7 @@ def test_parse_draft_rejects_invalid_json_or_non_object(text, location):
         ("summary", ["応答の目印"] * 6, "summary"),
         ("summary", [" \t "], "summary[0]"),
         ("summary", ["応答の目印\r本文"], "summary[0]"),
+        ("summary", ["\r応答の目印"], "summary[0]"),
         ("summary", ["<b>応答の目印"], "summary[0]"),
         ("summary", ["  :::tip 応答の目印"], "summary[0]"),
         ("summary", [1], "summary[0]"),
@@ -446,3 +448,439 @@ def test_write_atomic_preserves_old_file_and_removes_temp_on_failure(
     assert captured.value is failure
     assert path.read_text(encoding="utf-8") == "前の日誌\n"
     assert list(tmp_path.iterdir()) == [path]
+
+
+def _fake_route(model, responder):
+    from shipcast.config import ModelConfig
+    from shipcast.models import get_route
+
+    return get_route(ModelConfig("fake", model, None, None), env={}, responder=responder)
+
+
+@pytest.mark.parametrize("retry", [False, True])
+def test_compose_passes_only_story_outline_and_retries_invalid_draft(retry):
+    from importlib.resources import files
+
+    from shipcast.models import JSON_INSTRUCTION
+    from shipcast.write import compose
+
+    calls = []
+
+    def respond(prompt, system, want_json):
+        calls.append((json.loads(prompt), system, want_json))
+        values = _draft_values()
+        if retry and len(calls) == 1:
+            values["story"] = "## 応答の目印"
+        return json.dumps(values, ensure_ascii=False)
+
+    story = _story("非公開の話題ID", notice=("確認",), waiting=("回答",))
+    draft = compose([story], _fake_route("fake-writer", respond), repo_id=REPO, day=DAY)
+    assert draft.lead == "今日の要約です。"
+    outline = {
+        "title": "架空の話題",
+        "what": "見本を作成",
+        "why": "動作を確認",
+        "notice": ["確認"],
+        "waiting": ["回答"],
+    }
+    first = {"repo": REPO, "date": DAY.isoformat(), "stories": [outline]}
+    prompt_text = (files("shipcast") / "prompts" / "write.md").read_text(encoding="utf-8")
+    system = f"{prompt_text}\n\n{JSON_INSTRUCTION}"
+    assert calls[0] == (first, system, True)
+    assert len(calls) == 1 + retry
+    if retry:
+        second, second_system, want_json = calls[1]
+        errors = second.pop("previous_errors")
+        assert any(error.startswith("story: ") for error in errors)
+        assert "応答の目印" not in str(errors)
+        assert (second, second_system, want_json) == (first, system, True)
+
+
+def test_compose_reports_final_errors_without_response_values():
+    from shipcast.write import WriteFailed, compose
+
+    responses = iter(['{"lead": "最初の目印"}', '{"story": "## 応答の目印"}'])
+    calls = []
+
+    def respond(*args):
+        calls.append(args)
+        return next(responses)
+
+    with pytest.raises(WriteFailed) as captured:
+        compose([_story("sample")], _fake_route("fake-writer", respond), repo_id=REPO, day=DAY)
+    error = captured.value
+    assert error.attempts == len(calls) == 2
+    assert {item.partition(":")[0] for item in error.errors} == {"lead", "summary", "story"}
+    assert str(error).startswith("書き手の応答が2回とも決まった形になりませんでした：")
+    assert "応答の目印" not in str(error) and "最初の目印" not in str(error)
+
+
+def test_compose_propagates_route_failure_without_retry_or_call_for_empty_stories():
+    from shipcast.models import RouteFailed
+    from shipcast.write import compose
+
+    failure = RouteFailed("fake", reason="架空の失敗")
+    calls = []
+
+    def fail(*args):
+        calls.append(args)
+        raise failure
+
+    route = _fake_route("fake-writer", fail)
+    with pytest.raises(ValueError):
+        compose([], route, repo_id=REPO, day=DAY)
+    assert calls == []
+    with pytest.raises(RouteFailed) as captured:
+        compose([_story("sample")], route, repo_id=REPO, day=DAY)
+    assert captured.value is failure
+    assert len(calls) == 1
+
+
+def _analysis_reply(prompt, system, want_json):
+    events = json.loads(prompt)["events"]
+    return json.dumps(
+        {
+            "stories": [
+                {
+                    "title": f"今回の話題 {event['id']}",
+                    "what": "見本を作成",
+                    "why": "動作を確認",
+                    "notice": [f"確認 {event['id']}"],
+                    "neta": {"score": 1},
+                    "event_ids": [event["id"]],
+                }
+                for event in reversed(events)
+            ]
+        },
+        ensure_ascii=False,
+    )
+
+
+def _writer_reply(prompt, system, want_json):
+    assert "出来事の本文の目印" not in prompt
+    return json.dumps(_draft_values(), ensure_ascii=False)
+
+
+def _write_day(store, journal_dir, *, analysis_reply=_analysis_reply, writer_reply=_writer_reply):
+    from shipcast.write import write_day
+
+    return write_day(
+        store,
+        REPO,
+        DAY,
+        tz=NOW.tzinfo,
+        journal_dir=journal_dir,
+        now=NOW,
+        analyst=_fake_route("fake-analyst", analysis_reply),
+        writer=_fake_route("fake-writer", writer_reply),
+    )
+
+
+def test_write_day_uses_current_analysis_order_and_registered_extension(tmp_path, monkeypatch):
+    from shipcast import write
+    from shipcast.model import Entry, journal_path, story_id
+    from shipcast.state import Store
+
+    block = ":::tip 発信の芽\n架空の案\n:::"
+
+    class Extension:
+        def render(self, repo_id, day, stories, events):
+            return block
+
+    extension = Extension()
+    monkeypatch.setattr(write, "EXTENSIONS", (extension,))
+    journal_dir = tmp_path / "journal"
+    events = [_event("a"), _event("b")]
+    with Store(tmp_path / "state") as store:
+        store.add_events(events)
+        store.save_stories(
+            [_story("old-story", title="古い話題の目印", notice=("古い話題の目印",))]
+        )
+        result = _write_day(store, journal_dir)
+
+        assert result.path == journal_path(journal_dir, REPO, DAY)
+        assert result.events == 2
+        assert tuple(story.title for story in result.stories) == ("今回の話題 b", "今回の話題 a")
+        text = result.path.read_text(encoding="utf-8")
+        draft, errors = write.parse_draft(_writer_reply("{}", "", True))
+        assert not errors
+        assert text == _build_entry(result.stories, events, draft, extensions=[extension])
+        assert text.endswith(f"\n\n{block}\n")
+        assert "古い話題の目印" not in text
+        assert store.entry_for(REPO, DAY) == Entry(
+            REPO,
+            DAY,
+            str(result.path),
+            "fake/fake-analyst",
+            "fake/fake-writer",
+            NOW,
+            (story_id(REPO, DAY, ("b",)), story_id(REPO, DAY, ("a",))),
+        )
+
+
+def test_write_day_records_empty_day_without_calling_routes(tmp_path):
+    from shipcast.model import Entry, journal_path, parse_journal
+    from shipcast.state import Store
+
+    def unexpected(*args):
+        pytest.fail("出来事のない日に経路が呼ばれました")
+
+    journal_dir = tmp_path / "journal"
+    with Store(tmp_path / "state") as store:
+        result = _write_day(store, journal_dir, analysis_reply=unexpected, writer_reply=unexpected)
+        assert result.path == journal_path(journal_dir, REPO, DAY)
+        assert result.events == 0 and result.stories == ()
+        meta, body = parse_journal(result.path.read_text(encoding="utf-8"))
+        assert meta.lead == "大きな動きはありませんでした。"
+        assert meta.analyst is None and meta.writer is None
+        assert body == "\n大きな動きはありませんでした。\n"
+        assert store.entry_for(REPO, DAY) == Entry(
+            REPO,
+            DAY,
+            str(result.path),
+            "none",
+            "none",
+            NOW,
+        )
+
+
+@pytest.mark.parametrize("stage", ["analyst", "writer", "extension"])
+def test_write_day_preserves_existing_file_and_entry_on_failure(tmp_path, monkeypatch, stage):
+    from shipcast import write
+    from shipcast.analyze import AnalyzeFailed
+    from shipcast.model import Entry, journal_path
+    from shipcast.state import Store
+
+    failure = RuntimeError("拡張点の試験用エラー")
+
+    class BrokenExtension:
+        def render(self, repo_id, day, stories, events):
+            raise failure
+
+    def invalid(*args):
+        return "{}"
+
+    expected = {"analyst": AnalyzeFailed, "writer": write.WriteFailed, "extension": RuntimeError}
+    if stage == "extension":
+        monkeypatch.setattr(write, "EXTENSIONS", (BrokenExtension(),))
+
+    journal_dir = tmp_path / "journal"
+    path = journal_path(journal_dir, REPO, DAY)
+    path.parent.mkdir(parents=True)
+    path.write_text("前の日誌\n", encoding="utf-8")
+    old_entry = Entry(REPO, DAY, str(path), "old/analyst", "old/writer", NOW, ("old-story",))
+    with Store(tmp_path / "state") as store:
+        store.add_events([_event("a")])
+        store.save_entry(old_entry)
+        with pytest.raises(expected[stage]) as captured:
+            _write_day(
+                store,
+                journal_dir,
+                analysis_reply=invalid if stage == "analyst" else _analysis_reply,
+                writer_reply=invalid if stage == "writer" else _writer_reply,
+            )
+        if stage == "extension":
+            assert captured.value is failure
+        assert path.read_text(encoding="utf-8") == "前の日誌\n"
+        assert list(path.parent.iterdir()) == [path]
+        assert store.entry_for(REPO, DAY) == old_entry
+
+
+@pytest.fixture
+def write_cli(tmp_path, monkeypatch):
+    from shipcast import write
+    from shipcast.collect.base import CollectError, CollectResult
+
+    config = tmp_path / "config.toml"
+    journal_dir = tmp_path / "journal"
+    config.write_text(
+        f"""\
+timezone = "Asia/Tokyo"
+state_dir = "{tmp_path / "state"}"
+journal_dir = "{journal_dir}"
+
+[models.analyst]
+route = "fake"
+model = "fake-analyst"
+
+[models.writer]
+route = "fake"
+model = "fake-writer"
+
+[[repos]]
+id = "{REPO}"
+path = "{tmp_path / REPO}"
+
+[[repos]]
+id = "other-app"
+path = "{tmp_path / "other-app"}"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("SHIPCAST_CONFIG", str(config))
+
+    class Collector:
+        name = "git"
+        failure = None
+
+        def collect(self, repo, day, tz):
+            assert tz.key == "Asia/Tokyo"
+            if repo.id == self.failure:
+                raise CollectError("試験用の収集エラー")
+            event = _event(f"{repo.id}-commit", repo_id=repo.id)
+            assert event.at.date() == day
+            return CollectResult((event,), ("試験用の収集警告",))
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            assert tz.key == "Asia/Tokyo"
+            return NOW.replace(day=26).astimezone(tz)
+
+    collector = Collector()
+    monkeypatch.setattr(write, "COLLECTORS", (collector,))
+    monkeypatch.setattr(write, "datetime", FixedDatetime)
+    replies = {"fake-analyst": _analysis_reply, "fake-writer": _writer_reply}
+
+    def route(model_cfg):
+        assert model_cfg.route == "fake"
+        return _fake_route(model_cfg.model, replies[model_cfg.model])
+
+    monkeypatch.setattr(write, "get_route", route)
+    return journal_dir, collector, replies
+
+
+def test_write_cli_exposes_repo_and_date_options(capsys):
+    from shipcast.cli import main
+
+    with pytest.raises(SystemExit) as captured:
+        main(["write", "--help"])
+    assert captured.value.code == 0
+    stdout = capsys.readouterr().out
+    assert "--repo ID" in stdout and "--date YYYY-MM-DD" in stdout
+
+
+@pytest.mark.parametrize("selected", [True, False])
+def test_write_cli_writes_selected_or_all_repositories(capsys, write_cli, selected):
+    from shipcast.cli import main
+    from shipcast.model import journal_path, parse_journal
+
+    journal_dir, _, _ = write_cli
+    args = ["write", "--repo", REPO, "--date", DAY.isoformat()] if selected else ["write"]
+    assert main(args) == 0
+    output = capsys.readouterr()
+    path = journal_path(journal_dir, REPO, DAY)
+    assert f"{REPO} {DAY}: 日誌を書きました（出来事 1件、話題 1件）: {path}" in output.out
+    assert f"shipcast write: 警告: {REPO}: git: 試験用の収集警告" in output.err
+    meta, _ = parse_journal(path.read_text(encoding="utf-8"))
+    assert (meta.repo, meta.date, meta.generated_at) == (REPO, DAY, "2026-11-26T03:02:11+09:00")
+    assert journal_path(journal_dir, "other-app", DAY).exists() is (not selected)
+
+
+def test_write_cli_rejects_unknown_repo(capsys, write_cli):
+    from shipcast.cli import main
+
+    journal_dir, _, _ = write_cli
+    assert main(["write", "--repo", "missing-app"]) == 1
+    assert "shipcast write: 登録されていないrepositoryです: missing-app" in capsys.readouterr().err
+    assert not journal_dir.exists()
+
+
+def test_write_cli_skips_failed_collection_and_continues(capsys, write_cli):
+    from shipcast.cli import main
+    from shipcast.model import journal_path
+
+    journal_dir, collector, _ = write_cli
+    collector.failure = REPO
+    assert main(["write"]) == 1
+    output = capsys.readouterr()
+    assert f"shipcast write: 失敗: {REPO}: git: 試験用の収集エラー" in output.err
+    assert f"shipcast write: 失敗: {REPO}: 収集に失敗したため、日誌を書きませんでした" in output.err
+    assert not journal_path(journal_dir, REPO, DAY).exists()
+    assert journal_path(journal_dir, "other-app", DAY).exists()
+    assert f"other-app {DAY}: 日誌を書きました" in output.out
+
+
+def test_write_cli_reports_invalid_writer_response(capsys, write_cli):
+    from shipcast.cli import main
+
+    journal_dir, _, replies = write_cli
+    replies["fake-writer"] = lambda *args: "{}"
+    assert main(["write", "--repo", REPO]) == 1
+    assert (
+        f"shipcast write: 失敗: {REPO}: 書き手の応答が2回とも決まった形になりませんでした"
+        in capsys.readouterr().err
+    )
+    assert not journal_dir.exists()
+
+
+def test_write_cli_reports_extension_errors_for_each_repository(capsys, monkeypatch, write_cli):
+    from shipcast import write
+    from shipcast.cli import main
+
+    class BrokenExtension:
+        def render(self, repo_id, day, stories, events):
+            raise RuntimeError("拡張点の試験用エラー")
+
+    journal_dir, _, _ = write_cli
+    monkeypatch.setattr(write, "EXTENSIONS", (BrokenExtension(),))
+    assert main(["write"]) == 1
+    output = capsys.readouterr()
+    for repo_id in (REPO, "other-app"):
+        assert f"shipcast write: 失敗: {repo_id}: RuntimeError: 拡張点の試験用エラー" in output.err
+    assert "Traceback" not in output.err and not output.out
+    assert not journal_dir.exists()
+
+
+@pytest.mark.parametrize("error_type", ["route", "value"])
+def test_write_cli_reports_model_route_setup_error(capsys, monkeypatch, write_cli, error_type):
+    from shipcast import write
+    from shipcast.cli import main
+    from shipcast.models import RouteFailed
+
+    journal_dir, _, _ = write_cli
+    failure = RouteFailed("fake", reason="試験用の準備失敗")
+    if error_type == "value":
+        failure = ValueError("試験用の準備失敗")
+
+    def fail(model_cfg):
+        raise failure
+
+    monkeypatch.setattr(write, "get_route", fail)
+    assert main(["write"]) == 1
+    assert f"shipcast write: モデルの経路を作れません: {failure}" in capsys.readouterr().err
+    assert not journal_dir.exists()
+
+
+def test_write_cli_preflights_state_before_creating_routes(
+    tmp_path, capsys, monkeypatch, write_cli
+):
+    from shipcast import write
+    from shipcast.cli import main
+
+    journal_dir, _, _ = write_cli
+    (tmp_path / "state").write_text("ディレクトリではない状態の置き場", encoding="utf-8")
+
+    def unexpected(model_cfg):
+        pytest.fail("状態の置き場が開けないときにモデルの経路を作りました")
+
+    monkeypatch.setattr(write, "get_route", unexpected)
+    assert main(["write"]) == 1
+    error = capsys.readouterr().err
+    assert "shipcast write: 状態の置き場を開けません:" in error
+    assert "直し方: 設定の `state_dir` が" in error
+    assert not journal_dir.exists()
+
+
+def test_write_cli_propagates_keyboard_interrupt(write_cli):
+    from shipcast.cli import main
+
+    journal_dir, _, replies = write_cli
+
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    replies["fake-writer"] = interrupt
+    with pytest.raises(KeyboardInterrupt):
+        main(["write", "--repo", REPO])
+    assert not journal_dir.exists()
