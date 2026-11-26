@@ -183,13 +183,13 @@ HTMLの仕様には、`<script>` の中身に `<!--` があり、その後に `<
 デザインシステムのMarkdownは、本文に書かれた生のHTMLをそのまま描きます。本文に `<img src=x onerror="…">` が混ざると、そのままでは画像の読み込みの失敗でscriptが動きます。これは、すべての応答に付けるCSPで止めます。
 
 ```text title="すべての応答に付けるヘッダー"
-Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com/@plantuml/core@1.2026.6/ https://unpkg.com/@highlightjs/cdn-assets@11.11.1/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 X-Content-Type-Options: nosniff
 Referrer-Policy: no-referrer
 ```
 
 :::keyvalue cols=1
-- `script-src 'self' 'wasm-unsafe-eval' https://unpkg.com` | 自分の `ds.js` と、unpkg.com の決まった版の部品だけを動かす。インラインのscriptとイベントの属性（`onerror` など）は動かない
+- `script-src 'self' 'wasm-unsafe-eval' https://unpkg.com/@plantuml/core@1.2026.6/ …` | 自分の `ds.js` と、unpkg.com の **決まった版の2つの道筋** の部品だけを動かす。インラインのscriptとイベントの属性（`onerror` など）は動かない
 - `'wasm-unsafe-eval'` | PlantUMLの図の部品がWebAssemblyで動くために要る。`'unsafe-eval'`（文字列からscriptを作る）は許さない
 - `style-src 'unsafe-inline'` | `ds.js` が部品に `style` の属性を書くので要る
 - `img-src 'self' data:` | 本文の画像で外へ情報を送らせない
@@ -199,6 +199,10 @@ Referrer-Policy: no-referrer
 
 :::success 試作で確かめたこと（2026-11-26）
 親のEpicのCSP（`'wasm-unsafe-eval'` なし）では、図が `CompileError: WebAssembly.instantiate(): … violates the following Content Security policy directive` で描けませんでした。`'wasm-unsafe-eval'` を足すと、図・コードの色分け・部品が描け、`<img onerror>` は動かず、`<\/script>` を含むコードは文字のまま表示されました。
+:::
+
+:::danger 最終品質ゲートで見つかった穴：部品の読み込み先の差し替え
+はじめは unpkg.com のオリジン全体をscriptに許していました。ところが ds.js は、本文を文書に入れた後に `meta[name="ds-vendor-base"]` を探して、図と色分けの部品をそこから読みます。日誌の本文に `<meta name="ds-vendor-base" content="https://unpkg.com/誰かのパッケージ/">` が混ざると、第三者が unpkg に置いたscriptが日誌のページで動きえました（最終品質ゲートの ChatGPT の2人目の指摘。ヘッドレスの Chrome で要求が出ることを再現）。いまは unpkg.com の中でも、ds.js が読む決まった版の2つの道筋だけを許すので、差し替えた先はCSPで拒まれ、ds.js は決まった版から読み直します。
 :::
 
 ヘッダーは、配信のハンドラーの `end_headers()` という **1つの出口** で付けます。404や405、標準ライブラリが自分で返すエラー（501など）も、必ずこの出口を通るので、付け忘れが起きません。
@@ -279,7 +283,7 @@ $ uv run shipcast serve --help
 | リスク | 影響 | 起きやすさ | 対応 |
 |---|---|---|---|
 | デザインシステムが将来、別のCDNやインラインのscriptを使う | 中 | 低 | T-07 の確かめで気づき、最小の許可を足す |
-| unpkg.com 全体をscriptに許している | 中 | 低 | 今の `ds.js` には、本文から別のscriptを読ませる道がない |
+| CSPの unpkg の道筋が ds.js の部品の版に結び付く | 中 | 中 | 試験で ds.js の版とCSPがそろうことを確かめる。版を上げるときは同じ変更でCSPを直す |
 | `.ts.net` でない独自の名前で読みたくなる | 低 | 低 | 許す名前を設定に足す（別のIssue） |
 | 閉じていないコードの囲みで終わる日誌 | 低 | 低 | コードの中に `<!-- -->` が見えるだけ |
 :::

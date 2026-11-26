@@ -54,6 +54,7 @@ ID: "iss-00014"
 - S-02 `03ff1fdb60e6ac65c3492c5846fd54314d1def13`。エージェントの印の検出（T-04 の関数）。
 - S-03 `31a643cc0c2b5013a876362f43993cef56fd92c2`。4経路、共通の入口、エラー処理、runner（T-01、T-03〜06、T-08〜10）。
 - S-04 `7cdb3715a0491bfcb9395c7b0f22cf71fee4a972`。設定見本の分析モデルの行に `gpt-6-luna` と確認コマンドの注記を追加し、T-07 で解析後の設定が `ModelConfig("codex", "gpt-6.2-sol", "low", None)` のままであることを確認。
+- S-05 `74a6322bdca167605db10e8e6bc39fcc2f012084`。RD-04 は引用内のエスケープを値の一部として読み、RD-02・RD-04・RD-11 と JSON の秘密鍵名の判定は、改訂 D-01 に従って再走査を抑える。T-02 に引用・エスケープの例、T-11 に128,000文字の繰り返し25種×4形式の回帰試験を追加。
 
 ## Verification
 
@@ -63,6 +64,9 @@ ID: "iss-00014"
 - S-03。Red → Green は `uv run pytest -q tests/test_models.py -k <選択>`。経路の選択と fake は10失敗 → 10合格、runner は5失敗 → 5合格、環境の守りは24失敗 → 34合格、CLIの呼び方と伏せる境界は10失敗 → 11合格、応答と失敗は22失敗 → 25合格、長さと UTF-8 はそれぞれ1失敗 → 合計5合格、timeoutの型と応答の Unicode 改行は3失敗 → 7合格。最後に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q tests/test_redact.py tests/test_models.py`（143件）、`uv run pytest -q`（308件）が成功。CLIの呼び方は偽の runner で確認。
 
 - S-04。CP-1 合格後に着手し、`uv run pytest -q tests/test_config.py::test_default_analyst_model_documents_cheaper_option` が注記なしで1件失敗、注記を足して1件合格。順に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が成功（309件）。`uv run pytest -q tests/test_config.py`（26件）と `git diff --check f68349a HEAD` も成功。
+
+- S-05。改訂後の3文書の SHA-256 はレビュー合格記録に一致（計画は S-05 の `status` を `todo` に戻して計算）。`uv run pytest -q tests/test_redact.py -k 'quoted_or_escaped_assignment or escaped_json_fragment'` は修正前に2件失敗、修正後に11件合格。`uv run pytest -q 'tests/test_redact.py::test_redact_long_input_finishes_within_two_seconds[a-text]'` は修正前9.576秒で失敗、修正後に合格。
+- S-05 の最終検証は順に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が成功（420件）。`uv run pytest -q tests/test_redact.py tests/test_models.py --durations=5` は254件合格。`uv run python -` で D-01 の全11規則のパターン・フラグと `SECRET_KEY` の一致、および T-11 の100件の出力の一致を確認し、`time.perf_counter` で測った `redact()` の最長は0.046185秒、合計は3.461345秒（`a-text` は0.040824秒）。`git diff --check HEAD^ HEAD` も成功。
 
 ## 逸脱と判断
 
