@@ -4,7 +4,7 @@ goal: "書き手の応答の形とプロンプトを先に固め、その上に�
 
 steps: {
 	"S-01": {
-		status:   "todo"
+		status:   "doing"
 		title:    "書き手のプロンプトと応答の形（`parse_draft`）"
 		text:     "D-01・D-08。T-01・T-02・T-03 を `tests/test_write.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/prompts/write.md` と、`src/shipcast/write.py` の `PROMPT_PATH`・プロンプトを読む関数・`Draft`・`parse_draft` を書いて通す（Green）。完了の条件：その試験が通り、`uv run ruff check` が通る。"
 		realizes: ["R-02", "F-02"]
