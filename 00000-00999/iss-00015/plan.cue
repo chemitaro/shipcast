@@ -4,6 +4,7 @@ goal: "応答の形の検査とプロンプトを先に固め、その上に頼�
 
 steps: {
 	"S-01": {
+		status:   "doing"
 		title:    "分析のプロンプトとJSONの形（`parse_stories`）"
 		text:     "D-02・D-04。T-01 の `parse_stories` の部分、T-05、T-07 を `tests/test_analyze.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/prompts/analyze.md` と、`src/shipcast/analyze.py` の `PROMPT_PATH`・プロンプトを読む関数・`parse_stories` を書いて通す（Green）。完了の条件：その試験が通り、`uv run ruff check` が通る。"
 		realizes: ["R-01", "R-02"]
