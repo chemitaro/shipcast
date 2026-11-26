@@ -61,6 +61,16 @@ ID: "iss-00017"
 - レビュアー：Claude `code-reviewer`（Opus 5.5 / medium。strict の既定）を `axis: standards` と `axis: spec` の2人で並行
 - 結果のファイル：shipcast の worktree の `.workbench/code-review/iss-00017-cp1/round-1-{standards,spec}.json` と `.check.json`（`validate-review.py` が両方 exit 0、status pass）。前後の digest は同じ
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（campaign `iss-00017-fqg-4`、attempt 01）
+- 合格のコミット：`681d0b38856d732cff55a715ba03c37ab852ea92`（範囲 `f68349a..681d0b3`、main `994f3b9` を含む）。記録のみのコミットはなし（記録は Git の外の report.md・plan.cue）
+- 1人目：Claude `quality-gate-reviewer`（Opus 5.5 / high）。観点 functional-correctness、requirements-closure、test-adequacy、security-baseline、api-contract。P0〜P3 0件、coverage complete
+- 2人目：ChatGPT（GPT-6 / Extra High、`chatgpt-code-review-strict`、モデルと思考の選択は verified）。pass、P0 0件・P1 0件・P2 4件（情報）
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（372 passed）、`uv run shipcast serve --help` がすべて exit 0
+- 経緯：先のキャンペーン `iss-00017-fqg-2` は attempt 01（`5509559`）・02（`d860f28`、main の取り込み）で主レビューと試験が合格したが、attempt 02 の ChatGPT の P1（CSP が unpkg.com 全体を許し、本文の `ds-vendor-base` で第三者の script を読ませうる）をブラウザーで再現して採用し、仕様を変えた（round 2・3）。直し2件（`539a66a`、`681d0b3`）の後、authority が変わったので fqg-4 で固定し直した（fqg-1・fqg-3 は固定のやり直しで未使用）
+- 記録：shipcast の worktree の `.workbench/final-quality-gate/iss-00017-fqg-4/closure.md`、応答は同じ場所の `review-response.md`
+
 ## Outcome
 
 - S-01 `d7146d9`（impl-ui：タスク担当 Opus 5.5 / high、同じセッション）：`shipcast.page` の `wrap_markdown`（`</script` の ASCII の大小を問わない置き換えと、末尾の `\n<!-- -->\n`）、`notice_page`・`NOT_FOUND_PAGE`・`BROKEN_JOURNAL_PAGE`、架空の見本の日誌、dev の `html5lib`。
@@ -110,6 +120,9 @@ S-04 の後の `test_commands`：`uv sync --locked` 0、`uv run ruff check` 0、
 
 ## Residual Risks / Follow-ups
 
+- PR #29（https://github.com/chemitaro/shipcast/pull/29）で `ci` run 45826167989（pull_request、`681d0b3`）の job `test` が success。`github-pr-checks` の観測は OBSERVED_CI_PASS、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（2026-11-26T13:16:24Z）。外部の CheckRun は観測の範囲外。
+- マージと `spec-dock work finish` は、統括が本人に確かめてから行う（strict）。
+
 - **前付けの値の生のHTML（デザインシステム側の挙動）**：前付けの `lead` に閉じない `<!--` があると、ds.js がページの頭（シェル）を組むときに壊れ、`mountShell` の例外で本文が描かれない（T-07 で確認。本文の中の `<!--` では起きない）。日誌の書き手（iss-00016）は前付けの値に生のHTMLを書かないこと。shipcast の包みでは防げない（ds.js の中の処理）。
 - 本文が閉じていないコードの囲みで終わる日誌では、末尾の `<!-- -->` がコードの中に見える。
 - CSP の unpkg の道筋は ds.js の部品の版に結び付く。配信する ds.js は本人の登録した repository（または `design_system_dir`）のもので、その SpecDock が部品の版を上げると、図と色分けが描けなくなる（本文は描ける）。試験はこの repository の ds.js の版とだけ比べる（仕様レビュー round 2・3 の P2）。
@@ -117,5 +130,7 @@ S-04 の後の `test_commands`：`uv sync --locked` 0、`uv run ruff check` 0、
 - Host の検査は、`.ts.net` でない独自の名前や、点のない短い名前で読む使い方を拒む。
 - `serve` は設定ファイルの読み取りの `OSError`（権限、ディレクトリ）を `ConfigError` に変えず、トレースバックになる（最終品質ゲートの ChatGPT P2。`config.py` の側の扱い）。
 - iss-00018 への申し送り：一覧 `/<repo>/` を足すとき、`split_path` に末尾の `/` の扱いを足す（今は `None`）。
+- 前付けのキーの先頭の空白や `[A, B]` の値は、`parse_journal` は受けるが ds.js は別に解釈する（最終品質ゲートの ChatGPT P2）。日誌の書き手（iss-00016）は `write_frontmatter` の形で書く。
+- shipcast は利用者の認証をしない。本人だけが読むことは、Tailscale のアクセス制御（tailnet を共有しない、ACL）に委ねる。README への明記は統括の判断（最終品質ゲートの ChatGPT P2）。
 - 統括への申し送り：親 epic-00005 の F-03・D-01・D-05 が `<!--` を `<\!--` に置き換える案のまま。子の decisions と試作の証拠に合わせて親を直すかの判断。
 - ChatGPT の仕様レビューの2人目は取得できなかった（60分応答なし）。
