@@ -86,6 +86,10 @@ ID: "iss-00014"
 
 ## Residual Risks / Follow-ups
 
+- PR：https://github.com/chemitaro/shipcast/pull/30（branch `chemitaro/iss-00014`、head `74a6322bdca167605db10e8e6bc39fcc2f012084`、base `main`。`Refs #14`、自動で閉じる書き方は使わない）。`main` は他の Issue のマージで先に進んでいるが、変えたファイルは重ならず、マージは衝突しない（`git merge-tree` で確かめた）
+- CI：`ci` run 45826339321（pull_request、`74a6322`）が success。`github-pr-checks` の観測は exit 0、observable_ci PASS、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（2026-11-26T13:10:22Z）。外部の CheckRun は観測の範囲外
+- マージ：strict のため、統括が本人に確かめてから行う（タスク担当と実装担当はマージしない）。`spec-dock work finish` も統括が行う
+
 - 伏せる処理の文の層の規則で、まだ伏せられない形（規則の表 `RULES` を足す候補）：(1) 文の中の複数行の JSON の断片で、`:` の後で行が終わり、値が次の行にある形（最終品質ゲートの ChatGPT の P1、反論で閉じた）、(2) 引用の閉じの直後に続くシェルの連結（`'it'\''s…'`、`"abc"def`）の後ろ（主のレビューの P2）。JSON を prompt の全体として渡す道筋（iss-00015・iss-00016 の約束）は構造をたどって伏せるので影響しない。規則を足す別の Issue にするかは統括と本人が決める
 - `agy -p` の道具による残る危険（F-05）は本人が受け入れた（Q-01）。その採用の記録を `content/decisions/` に残すかは統括と本人が決める（仕様レビューの P2）
 - Antigravity の CLI が自分の道具の中で付けるエージェントの印は文書になく、2026-12-19 の規約の読み直しのときに見直す
