@@ -9,24 +9,191 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: iss-00022 毎晩3時の定期実行を登録する
-lead: `shipcast schedule install|uninstall` で、毎日3時のlaunchdの登録を作り、外せるようにします。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
+title: iss-00022 毎晩3時の定期実行を登録する（shipcast schedule）
+lead: `shipcast schedule install` で、毎日3時に `shipcast run` を動かす launchd の登録（plist）を作り、`uninstall` で外せるようにします。あわせて、夜の日誌にも「発信の芽」が付くようにします。
+category: 説明資料（Issue・standard）
+audience: このIssueのタスク担当・実装担当、統括、毎晩の実行を登録する本人
 status: 仕様を確定
+updated: 2026-11-27
+docid: iss-00022
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-`shipcast schedule install|uninstall` で、毎日3時のlaunchdの登録を作り、外せるようにします。親のE6の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- plistに3時、shipcastの絶対path、ログの置き場が入る
-- launchctlでの読み込みは本人が行う
+:::summary
+- `shipcast schedule install` が何を書き、何を書かないか（既定では `launchctl` を呼ばない）
+- plist の中身：3時、`shipcast` の絶対の道筋、ログの置き場、`PATH`
+- checkout の `.venv` の `shipcast` を登録しない理由
+- `uninstall` での外し方と、`--load`・`--unload` の動き
+- 外付けディスクを読むときの、フルディスクアクセスの付け方
+- 夜の `shipcast run` に「発信の芽」をつなぐ追随
+- 本物の環境に触れずに試験するしかた
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`standard`** です。本人のmacOSに定期の実行を登録するplistを作るため、受け入れ条件と試験を全要件に付けました。`launchctl` の読み込みは本人が行います。
+## 背景：夜の自動実行の最後の1ピース
+
+親の E6（epic-00007）の目標は「毎晩3時に、本人の手を借りずに前日の日誌ができる」ことです。
+
+:::cards cols=3
+### 動かす中身 {badge=iss-00021}
+`shipcast run`。全repositoryの前日の日誌を作り、結果を `runs` に残します。`main` に入っています。
+
+### 3時に起こす {badge=iss-00022}
+macOS の launchd に、毎日3時に `shipcast run` を動かす登録（plist）を置きます。**このIssue**です。
+
+### 発信の芽 {badge=iss-00019}
+ネタポイントがたまった日に、日誌の末尾へ印を付けます。夜の `run` にもつなぎます。
+:::
+
+launchd は、macOS の「決まった時刻にプログラムを動かす」仕組みです。ユーザーごとの登録は `~/Library/LaunchAgents/` に置く plist（XMLの設定ファイル）で、`launchctl bootstrap` で読み込むと有効になります。
+
+:::note 登録は本人の環境への変更
+plist を書くのは shipcast ですが、**読み込み（有効にする操作）は既定では本人が行います**。`install` は、打つべきコマンドを表示するだけです。`--load` を付けたときだけ、shipcast が `launchctl` を呼びます。
+:::
+
+## 使い方
+
+```sh
+uv tool install git+https://github.com/chemitaro/shipcast   # 導入（1回だけ）
+shipcast schedule install            # plist を書き、読み込みのコマンドを表示
+launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.shipcast.nightly.plist  # 表示どおりに本人が打つ
+shipcast schedule install --load     # 上の2行を1度に（読み込みまで行う）
+shipcast schedule uninstall          # plist を消し、外すコマンドを表示
+shipcast schedule uninstall --unload # 外してから消す
+```
+
+`501` は例です。実際の数字（uid）は表示に出ます。
+
+## 書かれる plist
+
+```xml
+<plist version="1.0">
+<dict>
+  <key>Label</key>                <string>com.shipcast.nightly</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/example/.local/bin/shipcast</string>
+    <string>run</string>
+  </array>
+  <key>StartCalendarInterval</key> <dict><key>Hour</key><integer>3</integer>
+                                         <key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key>       <string>/Users/example/.local/state/shipcast/logs/nightly.out.log</string>
+  <key>StandardErrorPath</key>     <string>/Users/example/.local/state/shipcast/logs/nightly.err.log</string>
+  <key>EnvironmentVariables</key>  <dict><key>PATH</key><string>（登録した時の PATH）</string></dict>
+  <key>ProcessType</key>           <string>Background</string>
+</dict>
+</plist>
+```
+
+| 項目 | なぜそうするか |
+|---|---|
+| 絶対の道筋 | launchd は `~` も相対の道筋も解きません |
+| `logs/` | 設定の `state_dir`（既定 `~/.local/state/shipcast`）の下。launchd はディレクトリを作らないので、`install` が先に作ります |
+| `PATH` | launchd の `PATH` は最小で、`git` やモデルのCLIが見つかりません。登録した時の `PATH` を写します（`SHIPCAST_CONFIG` があればそれも）。ほかの環境変数は写しません |
+| `RunAtLoad` なし | 読み込んだ瞬間には動かさず、3時だけに動かします |
+
+plist の組み立ては `build_plist` という、ファイルにも環境にも触れない関数にして、単独で試験します。
+
+## install の流れ
+
+```plantuml id=install
+@startuml
+title shipcast schedule install の流れ
+start
+:設定を読む（state_dir を知る）;
+if (読めない?) then (はい)
+  :直し方を出して終了コード1;
+  stop
+endif
+:PATH から shipcast を探す;
+if (見つからない／.venv の下?) then (はい)
+  :uv tool install の直し方を出して終了コード1;
+  note right: 何も書かない
+  stop
+endif
+:logs/ を作る;
+:plist を一時ファイルに書いて置き換える;
+if (--load?) then (はい)
+  :launchctl bootout（失敗は無視）;
+  :launchctl bootstrap gui/<uid> <plist>;
+  if (失敗?) then (はい)
+    :理由を出して終了コード1;
+    stop
+  endif
+  :「読み込みました」;
+else (いいえ)
+  :本人が打つコマンドを表示;
+endif
+:フルディスクアクセスに足す実行ファイルを表示;
+stop
+@enduml
+```
+
+:::warning checkout の `.venv` の shipcast は登録しない
+worktree や checkout で `uv run shipcast ...` を使うと、`PATH` の先頭に `.venv/bin` が入ります。それを登録すると、branch を切り替えたり worktree を消したりしたときに、夜の実行が知らないうちに別のコードで動くか、動かなくなります。そこで、見つけた道筋かその実体に `.venv` があれば、登録を断ります。`uv tool install` で入れた `shipcast`（例 `~/.local/bin/shipcast`）を使います。
+
+登録する道筋は symlink を解かずにそのまま使います。`uv tool upgrade` で中身が入れ替わっても、登録が切れないようにするためです。
+:::
+
+## uninstall と、もう一度の install
+
+- `uninstall` は plist を消し、`launchctl bootout gui/<uid>/com.shipcast.nightly` を表示します。plist がなくても誤りにしません。
+- `--unload` を付けると、消す前に `bootout` を呼びます。読み込んでいなかったときは警告を出して、そのまま消します。
+- `install` をもう一度行うと、plist を置き換えます。`--load` のときは、先に `bootout` してから `bootstrap` するので、繰り返しても失敗しません。
+
+## 外付けディスクとフルディスクアクセス
+
+macOS は、launchd から動くプログラムが外付けvolumeを読むことを、許可（TCC）なしでは拒みます。夜の `shipcast run` は、そのとき `runs` の誤りに直し方を添えます（iss-00021）。許可を付けるのは本人です。
+
+:::steps
+### 足す実行ファイルを知る
+`shipcast schedule install` の最後の行に、`shipcast` を動かす Python の実行ファイルの道筋が出ます。
+
+### システム設定で足す
+「システム設定」→「プライバシーとセキュリティ」→「フルディスクアクセス」で「＋」を押し、`Cmd+Shift+G` でその道筋を入れて足します。
+
+### 入れ替えたら足し直す
+Python を入れ替える（`uv` の Python を上げる）と道筋が変わるので、足し直します。手で `shipcast run` を動かすときは、ターミナルを許可します。
+:::
+
+:::note 本人の確かめで確定する仮定
+`shipcast` は Python のスクリプトなので、許可は実際に動く Python の実行ファイルに付けるもの、と仮定しています。試験では確かめられないので、本人が外付けvolumeで確かめ、違えば案内を直します。
+:::
+
+## 夜の日誌にも「発信の芽」
+
+iss-00019 は、ネタポイントがしきい値に届いた日に、日誌の末尾へ `:::tip 発信の芽（ネタポイント n）` を付ける部品 `write.journal_extensions` を作りました。`shipcast write` は使っていますが、`shipcast run` はまだ渡していません（iss-00021 が差し込み口 `journal_extensions_for` を用意し、今は `None` を返します）。このIssueで、その中身を `journal_extensions(store, config.neta.threshold)` に変えます。
+
+## 作る順番と試験
+
+:::steps
+### S-01 plist と実行ファイル
+`build_plist`・`nightly_environment`・`find_program`。plist の中身、写す環境変数、`.venv` を断ることを試験します（T-01〜T-03）。
+
+### S-02 install と uninstall
+CLI と `launchctl` の呼び出し、`cli.py` の接続。既定では `launchctl` を呼ばないこと、`--load`・`--unload`、入口の誤り、消すときの動きを試験します（T-04〜T-07）。
+
+### S-03 発信の芽の追随
+`journal_extensions_for` を台帳につなぎ、しきい値に届いた日の夜の日誌に印が付くことを試験します（T-08）。
+
+### S-04 README
+導入・登録・外し方・ログ・フルディスクアクセスの節（T-09）。
+:::
+
+:::warning 試験は本物の環境に触れない
+試験は `HOME` を一時のディレクトリに差し替え、`shutil.which` と `launchctl` を偽物にします。さらに、`subprocess.run` が呼ばれたら試験を落とす見張りを置き、本物の `~/Library/LaunchAgents/` と `launchctl` に触れないことを保証します。外部のモデルも `agy` も呼びません。本物の launchd での読み込みと3時の起動は、本人の手動の確かめです。
+:::
+
+## このIssueでしないこと
+
+- 本人の環境での登録（`install --load` の実行）と、フルディスクアクセスの付与
+- ログのファイルの回転、Linux の systemd・cron への登録
+- `shipcast run` の処理そのもの、`write`・`neta`・`config`・`state` の変更
+
+:::note 気をつけること
+- launchd の3時は Mac の時計の時刻です。設定の `timezone` が違うと「前日」がずれます。
+- Mac が3時に眠っていると、起きた後に1回動きます。
+- 登録の後に `PATH` を変えたら、`install` をやり直します。
 :::
 
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
