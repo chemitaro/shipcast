@@ -47,4 +47,21 @@ ID: "iss-00020"
 - S-02 `31be37f085cb57540255eba3ddfcc0ded9d1c413` は T-03 が7件失敗から7件通過、T-04 が7件失敗から7件通過。同日付での並行実行の回帰試験は1件失敗から1件通過。同じ3コマンドがすべて終了コード0、848件通過。
 - `spec-dock scope check iss-00020 --offline` で各手順の状態更新後に CUE を検証。
 
+### 最終品質ゲート
+
+- **合格**（1回目）。campaign `.workbench/final-quality-gate/iss-00020-fqg-1/`、`closure.md`。合格のコミット `31be37f085cb57540255eba3ddfcc0ded9d1c413`
+- `quality-gate-reviewer`（Opus 5.5 / medium）：P0 0・P1 0・P2 0・P3 0、coverage_complete true（観点 functional-correctness・requirements-closure・test-adequacy・security-baseline）。実装担当が足した POSIX flock も害なしと確認
+- 試験：`uv sync --locked` 0、`uv run ruff check` 0、`uv run pytest -q` 0（848 passed）
+- 説明資料：ヘッドレスの Chrome で描画し、PlantUML の図が `data-status="success"` で描けることを確かめた
+
+### PR と CI
+
+- PR https://github.com/chemitaro/shipcast/pull/36（`chemitaro/iss-00020` → `main`、head `31be37f`、`Refs #20`）
+- CI：観測中
+
 ## Residual Risks / Follow-ups
+
+- 公開範囲・NGワードによる絞り込みがまだない。書き手に渡す項目を `title`・`what`・`why` に絞り、経路の伏せ字と本人の確認に任せる
+- 消化を戻すコマンドがない（台帳の `consumed` を0にすれば戻る）。下書きを置いた後の消化で落ちると、下書きはあり話題は未消化のまま残る
+- スキームのないドメインは X の URL の数え方で数えない（仕様レビューの P3）。非 POSIX では同時実行の直列化がない
+- 並行の iss-00021 も `cli.py` と `tests/test_cli.py` の未実装の一覧を変えるので、隣り合う行で衝突し得る
