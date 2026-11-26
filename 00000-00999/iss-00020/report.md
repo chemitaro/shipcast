@@ -35,6 +35,8 @@ ID: "iss-00020"
 
 ## 逸脱と判断
 
+- P2 を反映し、本文と各ハッシュタグを既存の `write._string_errors` で検査する。UTF-8 に変換できない応答は項目名だけを含む誤りとして返し、一度だけ頼み直す。T-01 と T-02 で単独のサロゲートを検証した。
+
 ## Verification
 
 ## Residual Risks / Follow-ups
