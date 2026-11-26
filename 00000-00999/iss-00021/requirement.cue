@@ -16,7 +16,7 @@ background: """
 
 - `shipcast.config`：`load_config()`・`ConfigError`、`Config.timezone`・`state_dir`・`journal_dir`・`models`・`repos`（iss-00009）
 - `shipcast.state`：`Store`（`record_run(run)`・`runs_for(repo_id)`・`add_events` は `INSERT OR IGNORE`）、`Run(repo_id, started_at, finished_at, result, error)`（`result` は `ok` か `failed`）、`StateError`（iss-00010）。`runs` の表はすでにあり、形は変えない
-- `shipcast.collect`：`COLLECTORS`。`shipcast.collect.base`：`collect_repo(store, repo, day, *, tz, collectors)`（誤りは例外でなく `RepoCollection.errors` に入る）（iss-00011〜iss-00013）。git の失敗は `git <subcommand> が失敗しました: <path>: <stderrの最後の行>` の文になる
+- `shipcast.collect`：`COLLECTORS`。`shipcast.collect.base`：`collect_repo(store, repo, day, *, tz, collectors)`（誤りは例外でなく `RepoCollection.errors` に入る）（iss-00011〜iss-00013）。git の失敗は `git <subcommand> が失敗しました: <path>: <stderrの最後の行>` の文になるが、最初の `rev-parse --show-toplevel` の失敗は stderr を捨てて `<path>: Gitのrepositoryではありません` になる（`collect/git.py` の `_resolve_tip`）。そのため TCC の見分けは collector の文だけに頼らない（design.cue の D-04）
 - `shipcast.models`：`get_route(model_cfg)`、`RouteError`（iss-00014）
 - `shipcast.write`：`write_day(store, repo_id, day, *, tz, journal_dir, analyst, writer, now)`（日誌の置き換えと `entries` の記録まで。iss-00016）
 
@@ -33,7 +33,7 @@ excludes: [
 	"launchd の登録（`shipcast schedule install`・`uninstall`）とログのファイルの置き場（iss-00022）。このIssueのログは標準出力と標準エラーだけで、launchd がそれをファイルに書く",
 	"`shipcast.write`・`shipcast.state`・`shipcast.config`・`shipcast.collect`・`shipcast.models`・`shipcast.analyze`・`shipcast.model` の変更",
 	"`runs` の表の形の変更、古い `runs` の行の削除",
-	"ネタポイントの台帳と発信の下書き（iss-00019・iss-00020）",
+	"ネタポイントの台帳と発信の下書き（iss-00019・iss-00020）。`shipcast run` から「発信の芽」を出す配線は、両方が `main` に入った後の追随（decisions を見る）",
 	"macOS のフルディスクアクセスを自動で付けること。案内の文を記録に添えるだけで、許可は本人が行う",
 	"本物の `codex`・`claude`・`agy` を呼ぶ試験。本物の経路での確かめは、本人の手動の実行だけ",
 ]
@@ -60,7 +60,7 @@ requirements: {
 		acceptance: [
 			"`runs` の表に、処理したrepositoryごとに1行（開始・終了・結果 `ok` か `failed`・誤りの文）が入る。成功の行の誤りは空",
 			"1つのrepositoryの収集の失敗、分析・執筆の失敗、想定外の例外のどれでも、そのrepositoryを `failed` として記録し、次のrepositoryを処理する",
-			"全部が成功なら終了コード0、1つでも失敗なら1。標準出力にrepositoryごとの結果、標準エラーに失敗の理由が出る",
+			"全部が成功なら終了コード0、1つでも失敗なら1。標準出力に、処理したrepositoryごとに成功か失敗かの1行と、最後に件数の1行が出る。失敗の理由は標準エラーに出る",
 		]
 	}
 	"R-03": {
@@ -80,7 +80,7 @@ failures: {
 	}
 	"F-02": {
 		title:  "TCCで読めないときは、直し方を記録に添える"
-		text:   "外付けvolumeのrepositoryを macOS の許可（TCC）で読めず、誤りの文に `Operation not permitted` があるときは、`runs` の誤りと標準エラーに、フルディスクアクセスの付け方を添える。"
+		text:   "外付けvolumeのrepositoryを macOS の許可（TCC）で読めず、repositoryのディレクトリの読み取りが `PermissionError`（`Operation not permitted`）になるとき、または誤りの文に `Operation not permitted` があるときは、`runs` の誤りと標準エラーに、フルディスクアクセスの付け方を添える。"
 		impact: "夜の実行は本人が見ていないので、理由が分からないと毎晩同じ失敗が続く"
 	}
 }
@@ -89,4 +89,5 @@ decisions: [
 	"lock を取れないときは、`runs` に書かず、標準エラーの1行だけを記録とする（epic-00007 の D-02「記録して終了コード0」の「記録」をこう解釈する。`runs` は repositoryごとの結果の表で、動いている側が状態を書いている最中に触らないため）。タスク担当の判断（2026-11-26）",
 	"モデルの経路が作れないときは、選んだrepositoryのすべてを、その理由で `failed` として記録し、終了コード1（夜の実行の失敗が `runs` から分かるように）。タスク担当の判断（2026-11-26）",
 	"`write.py` を変えず、repositoryごとの処理は `run.py` に書く（並行する iss-00019 との衝突を避ける。統括の依頼）",
+	"iss-00019 の申し送り（`shipcast run` も `write_day` に `extensions=journal_extensions(store, config.neta.threshold)` を渡す）は、`journal_extensions` がまだ `main` にないので、このIssueでは配線しない。`run.py` は拡張点の一覧を1つの関数 `journal_extensions_for(store, config)`（今は `None` を返す）から得る形にし、iss-00019 と iss-00021 の両方が `main` に入った後に、その関数の中身を `write.journal_extensions(store, config.neta.threshold)` に変える小さな追随を、統括が後にマージする側か追随のIssueに割り当てる。タスク担当の判断（2026-11-26）。統括に申し送る",
 ]

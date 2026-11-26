@@ -91,8 +91,9 @@ if (モデルの経路を作れる?) then (いいえ)
   stop
 endif
 repeat :次のrepository;
+  :読み取りの確かめ（probe_readable）;
   :収集（collect_repo）;
-  if (収集に誤り?) then (はい)
+  if (読めない／収集に誤り?) then (はい)
     :failed（日誌は書かない）;
   else (いいえ)
     :まとめて書く（write_day）;
@@ -118,6 +119,8 @@ stop
 ### 2 {badge=引数}
 引数の誤り（`--date` が日付でないなど）。argparse が出します。
 :::
+
+標準出力には、repositoryごとに `<id> <日>: 日誌を書きました…` か `<id> <日>: 失敗しました（理由は標準エラー）` の1行と、最後に `shipcast run: <日>: 成功 n件、失敗 m件` が出ます。失敗の理由は標準エラーに出ます。
 
 `runs` の表には、処理したrepositoryごとに1行が足されます。
 
@@ -155,7 +158,7 @@ A -> L : 処理の後に外す
 
 ## 外付けディスクが読めないとき（TCC）
 
-macOS は、launchd から動くプログラムが外付けvolumeを読むことを、許可（TCC）なしでは拒みます。そのときGitの誤りには `Operation not permitted` が出ます。夜は本人が見ていないので、`runs` の誤りと標準エラーに、次の案内を添えます。
+macOS は、launchd から動くプログラムが外付けvolumeを読むことを、許可（TCC）なしでは拒みます。そのとき、ディレクトリの読み取りが `Operation not permitted`（EPERM）で拒まれます。Gitの最初の呼び出しの失敗は理由の文を残さないので、収集の前に `probe_readable` でディレクトリを開いてみて見分けます。誤りの文に `Operation not permitted` があるときも同じです。夜は本人が見ていないので、`runs` の誤りと標準エラーに、次の案内を添えます。
 
 :::tip 添える案内
 直し方: macOS の「システム設定」→「プライバシーとセキュリティ」→「フルディスクアクセス」で、shipcast を動かすプログラム（launchd から動かすときは `shipcast` の実行ファイル、手で動かすときはターミナル）を許可してください
@@ -194,6 +197,10 @@ macOS は、launchd から動くプログラムが外付けvolumeを読むこと
 - launchd の登録とログのファイルの置き場（iss-00022）
 - `write.py`・`state.py` など既存のmoduleと、`runs` の表の形の変更
 - フルディスクアクセスを自動で付けること
+
+:::note 「発信の芽」（iss-00019）との合流
+iss-00019 は、日誌の末尾に「発信の芽」を出す部品を `write.journal_extensions` として作ります。まだ `main` にないので、このIssueでは `run.py` の `journal_extensions_for`（今は `None` を返す）を1か所の差し込み口にしておき、両方が `main` に入った後に、その中身を差し替える小さな追随を行います（統括が割り当てます）。
+:::
 
 要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
