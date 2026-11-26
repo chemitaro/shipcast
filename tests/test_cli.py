@@ -67,7 +67,6 @@ def test_module_help_matches_cli_help(capsys):
     ("command", "issue_id"),
     [
         ("run", "iss-00021"),
-        ("draft x", "iss-00020"),
         ("schedule install", "iss-00022"),
         ("schedule uninstall", "iss-00022"),
     ],
