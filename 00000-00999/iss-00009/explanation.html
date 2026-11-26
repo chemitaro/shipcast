@@ -10,27 +10,370 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00009 設定ファイルとrepositoryの登録
-lead: `config.toml` を読み、SpecDockを使うrepositoryを `shipcast repo add|list` で登録・一覧できるようにします。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+lead: 設定ファイル `config.toml` を型のついた設定として読み、日誌の対象のrepositoryを `shipcast repo add` で登録し、`shipcast repo list` で一覧できるようにします。後のIssueは `load_config()` の1行で設定を受け取れます。
+category: 説明資料（Issue・standard）
+audience: このIssueのタスク担当・実装担当、統括、ハッカソンの見学者
+status: 仕様を具体化（仕様のレビューの前）
+updated: 2026-11-26
+docid: iss-00009
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-`config.toml` を読み、SpecDockを使うrepositoryを `shipcast repo add|list` で登録・一覧できるようにします。親のE1の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- SpecDockのないrepositoryは足さない
-- 同じidは二重に足さない
-- 壊れた設定は、直し方を示して止まる
+:::summary
+- このIssueが、shipcastの全体のどこに当たり、なぜ大事なのか
+- 設定ファイル `config.toml` の形と、読むと得られる型（`Config`・`RepoConfig`）
+- `shipcast repo add` が、本人の書いた設定を壊さずに書き足す仕組み
+- 壊れた設定・SpecDockのないrepository・重複の登録での止まり方
+- 試験、関門、担当の分け方
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`standard`** です。設定ファイルの形はほかの全Issueが読む共通の約束なので、受け入れ条件と試験を全要件に付けました。
+## このIssueの位置
+
+shipcastは、登録したrepositoryごとに、その日の出来事を集め（E2）、日誌を書き（E3）、Webページで見せます（E4）。どのrepositoryを対象にするか、どのモデルを使うか、日誌と状態をどこに置くかは、すべて **1つの設定ファイル** で決めます。このIssueは、その設定ファイルを読む部品と、repositoryを登録するコマンドを作ります。
+
+```plantuml id=position
+@startuml
+title 設定を読む部品と、それを使う後のIssue
+left to right direction
+actor "本人" as user
+file "config.toml\n（~/.config/shipcast/）" as file
+package "iss-00009（このIssue）" {
+  [shipcast repo add] as add
+  [shipcast repo list] as list
+  [shipcast.config\nload_config()] as cfg
+}
+package "後のIssue" {
+  [収集（E2）\nRepoConfig を受け取る] as collect
+  [執筆（E3）\nモデルの経路を読む] as write
+  [配信（E4）\nserve の値を読む] as serve
+  [夜の実行（E6）\n全repositoryを回す] as run
+}
+user --> add : 登録する
+user --> list : 確かめる
+add --> file : 末尾に書き足す
+cfg --> file : 読む
+list --> cfg
+collect --> cfg
+write --> cfg
+serve --> cfg
+run --> cfg
+@enduml
+```
+
+:::note 親の約束と保証レベル
+親の E1（epic-00002）の R-02「設定ファイルで、対象のrepositoryとモデルの経路と置き場を決められる」と F-01「設定ファイルがない・壊れているときは、直し方を示して止まる」を、このIssueが受け持ちます。保証レベルは **standard** です。設定の形は後の全Issueが読む共通の約束で、`repo add` は本人の手元のファイルを書き換えるからです。ただし、ファイルは手元だけにあり、PRを戻して足した塊を消せば回復できます。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+:::glossary
+- **設定ファイル**（せっていファイル）: `~/.config/shipcast/config.toml`。環境変数 `SHIPCAST_CONFIG` で別の場所にできます。repositoryの外に置きます
+- **登録**（とうろく）: 設定ファイルに `[[repos]]` の塊を1つ足すことです。登録したrepositoryだけが日誌の対象になります
+- **既定値**（きていち）: 設定ファイルに書かれていない項目に入る値です。epic-00002 の D-02 の見本の値と同じです
+:::
+
+## 作るファイル
+
+:::tree
+src/shipcast/config.py     # + 型、置き場、読み込みと検証、書き足し（CLIに依存しない）
+src/shipcast/repo.py       # + repo add / repo list の葉（引数、出力、終了コード）
+src/shipcast/cli.py        # ~ COMMANDS の repo の行に、2つの葉の configure を渡すだけ
+tests/test_config.py       # + shipcast.config の試験（T-01〜T-07、T-14の一部）
+tests/test_repo.py         # + main(["repo", ...]) を通した試験（T-08〜T-17）
+tests/test_cli.py          # ~ 未実装の葉の一覧から repo add と repo list を外すだけ
+:::
+
+依存の向きは `cli` → `repo` → `config` の一方向です。後のIssueは `shipcast.config` だけを読み込めば済みます。並行に進む iss-00010（`shipcast.model`・`shipcast.state`）とぶつからないよう、共有のファイルは最小の行だけを変えます。
+
+## 設定ファイルの形
+
+```toml title="~/.config/shipcast/config.toml（epic-00002 の D-02 の見本）"
+schema = 1
+timezone = "Asia/Tokyo"
+journal_dir = "~/.local/share/shipcast/journal"
+state_dir = "~/.local/state/shipcast"
+
+[models.analyst]
+route = "codex"          # codex | claude | fake
+model = "gpt-6.2-sol"
+effort = "low"
+
+[models.writer]
+route = "antigravity"    # antigravity | claude | codex | fake
+model = "gemini-4-neon"
+thinking = "high"
+
+[serve]
+host = "127.0.0.1"
+port = 8765
+design_system_dir = ""   # 空なら、登録したrepositoryの spec-dock/design-system を使う
+
+[neta]
+threshold = 6
+
+[[repos]]
+id = "sample-app"
+path = "/abs/path/to/sample-app"
+ref = "main"
+title = "Sample App"
+orca = true
+```
+
+読むと、次の型（すべて変えられない `dataclass`）になります。
+
+```plantuml id=types
+@startuml
+title load_config() が返す型
+hide empty methods
+class Config {
+  schema : int = 1
+  timezone : str
+  journal_dir : Path
+  state_dir : Path
+  repos : tuple[RepoConfig, ...]
+}
+class ModelsConfig
+class ModelConfig {
+  route : str
+  model : str
+  effort : str | None
+  thinking : str | None
+}
+class ServeConfig {
+  host : str
+  port : int
+  design_system_dir : Path | None
+}
+class NetaConfig {
+  threshold : int
+}
+class RepoConfig {
+  id : str
+  path : Path
+  ref : str
+  title : str
+  orca : bool
+}
+Config *-- ModelsConfig : models
+ModelsConfig *-- "analyst" ModelConfig
+ModelsConfig *-- "writer" ModelConfig
+Config *-- ServeConfig : serve
+Config *-- NetaConfig : neta
+Config *-- "0..*" RepoConfig : repos
+@enduml
+```
+
+:::datatable 書かれていない項目に入る既定値
+| 項目 | 既定値 |
+|---|---|
+| `schema` | `1` |
+| `timezone` | `Asia/Tokyo` |
+| `journal_dir` | `~/.local/share/shipcast/journal`（`~` を展開） |
+| `state_dir` | `~/.local/state/shipcast`（`~` を展開） |
+| `models.analyst` | `codex` / `gpt-6.2-sol` / `effort=low` |
+| `models.writer` | `antigravity` / `gemini-4-neon` / `thinking=high` |
+| `serve` | `127.0.0.1` / `8765` / `design_system_dir=None` |
+| `neta.threshold` | `6` |
+| `repos` | 0件 |
+| `repos[].ref` / `title` / `orca` | `main` / その `id` / `true` |
+:::
+
+:::tip 項目ごとに補う
+既定値は項目ごとに補います。たとえば `[models.writer]` に `route = "fake"` だけを書けば、`model` と `thinking` は既定値のままです。試験や予行で偽物の経路を使うときに便利です。
+:::
+
+## 値の確かめ
+
+読むときに、すべての値の形と範囲を確かめます。最初に見つけた誤りを1つだけ、項目の名前と直し方を付けて示します。
+
+:::datatable 主な規則
+| 項目 | 規則 |
+|---|---|
+| 一番上 | 知らない項目は誤り（打ち間違いを黙って既定値で動かさない） |
+| `schema` | `1` だけ |
+| `timezone` | `zoneinfo` で開ける名前 |
+| 道筋（`journal_dir` など） | `~` を展開して絶対の道筋。相対は誤り |
+| `models.*.route` | analyst は `codex`・`claude`・`fake`、writer は `antigravity`・`claude`・`codex`・`fake` |
+| `serve.port` | 1〜65535 の整数（`true` は誤り） |
+| `neta.threshold` | 1以上の整数 |
+| `repos[n].id` | 英小文字・数字・`-` だけ（`^[a-z0-9]+(-[a-z0-9]+)*$`）。重複しない |
+| `repos[n].path` | 必須。絶対の道筋 |
+:::
+
+:::annotate 壊れた設定を読んだとき
+```text
+$ uv run shipcast repo list
+shipcast repo list: /home/me/.config/shipcast/config.toml: repos[2].path: 絶対の道筋ではありません   # (1)
+直し方: path は "/" か "~" で始まる絶対の道筋にしてください                                     # (2)
+$ echo $?
+1                                                                                               # (3)
+```
+1. どのファイルの、どの項目かを示します。`repos[2]` は、上から2つ目の `[[repos]]` です。TOMLの文法の誤りなら、項目の名前の代わりに行の番号（`line 3`）を示します
+2. 続けて、直し方を1行で示します
+3. 終了コードは1です（使い方の誤りの2と分けます）。何も書きません
+:::
+
+## `shipcast repo add` の流れ
+
+`repo add` は、本人が手で書いた設定ファイルを **壊さない** ことを最も大事にします。TOMLを書き出すライブラリで全体を作り直すと、コメントや並びが消えてしまうので、既存の中身はそのまま残し、末尾に `[[repos]]` の塊を文字列で足します。
+
+```plantuml id=add-flow
+@startuml
+title repo add が書くまでの確かめ
+start
+:対象の道筋を絶対の道筋にする;
+if (ディレクトリで、spec-dock/workspace.json がある？) then (はい)
+else (いいえ)
+  :「SpecDockを使っていません」\n終了コード1（何も書かない）;
+  stop
+endif
+:id・title・ref を決める\n（省けばディレクトリの名前から作る）;
+if (設定ファイルがある？) then (ある)
+  :読んで確かめる;
+  if (壊れている？) then (はい)
+    :行か項目と直し方を示す\n終了コード1（何も書かない）;
+    stop
+  endif
+else (ない)
+  :既定の内容を元にする;
+endif
+if (同じ id か同じ path が登録済み？) then (はい)
+  :「すでに登録されています」\n終了コード1（何も書かない）;
+  stop
+endif
+:元の中身 + 空行 + [[repos]] の塊 を作る;
+if (作った文字列を読み直すと、1件だけ増えている？) then (はい)
+  :同じディレクトリの一時ファイルに書き\nos.replace で置き換える;
+  :「登録しました」\n終了コード0;
+else (いいえ)
+  :直し方を示して終了コード1;
+endif
+stop
+@enduml
+```
+
+:::beforeafter
+### 変更前
+```toml
+# 自分用のメモ：writer は予行のあいだ fake にする
+[models.writer]
+route = "fake"
+```
+### 変更後
+```toml
+# 自分用のメモ：writer は予行のあいだ fake にする
+[models.writer]
+route = "fake"
+
+[[repos]]
+id = "demo-repo"
+path = "/home/me/src/Demo Repo"
+ref = "main"
+title = "Demo Repo"
+orca = true
+```
+:::
+
+:::terminal title="登録と一覧（架空のrepository）"
+$ uv run shipcast repo add ~/src/"Demo Repo"
+登録しました: demo-repo /home/me/src/Demo Repo
+$ uv run shipcast repo add ~/src/sample-app --title "Sample App" --ref develop
+登録しました: sample-app /home/me/src/sample-app
+$ uv run shipcast repo list
+demo-repo	Demo Repo	/home/me/src/Demo Repo	main
+sample-app	Sample App	/home/me/src/sample-app	develop
+:::
+
+:::details 壊さないための細かい約束 open
+- 既存の中身は文字列のまま扱い、先頭はバイト単位で同じに残します。末尾に改行がなければ改行を足してから、空行と塊を足します
+- 値は TOML の基本の文字列（`"..."`）にし、`"`・`\`・改行などをエスケープします。日本語もそのまま書けます
+- 書く前に、作った文字列を読み直し、`repos` がちょうど1件増えたことを確かめます。元のファイルが `repos = [...]` の形だと `[[repos]]` を足せないので、書かずに止まります
+- 一時ファイルに書いてから `os.replace` で置き換えるので、途中で失敗しても元のファイルは元のままです。許可の値も写します
+- 設定ファイルが記号のリンク（dotfilesの管理など）なら、リンクを保ってリンクの先を書き換えます
+- 対象のrepositoryには何も書かず、`git` も実行しません（読むのは `spec-dock/workspace.json` があるかだけ）
+:::
+
+:::note 設定ファイルがないとき
+最初の `repo add` は、親のディレクトリごと設定ファイルを作り、既定の内容（上の見本から `[[repos]]` を除き、説明のコメントを足したもの）の後に塊を書きます。「設定ファイルを作りました」と示します。`repo list` と `load_config()` は作らずに、`shipcast repo add <path>` で作れることを示して止まります。
+:::
+
+## 決めたこと
+
+:::decision 行の番号と項目の名前 status=決定済み date=2026-11-26
+### 決定
+TOMLの文法の誤りは行の番号で、値の誤りは項目の名前（`repos[2].path` など）で場所を示します。
+### 理由
+標準の `tomllib` は、文法の誤りには行を返しますが、読めた値がどの行にあったかは返しません。項目の名前なら、本人がファイルの中で探せます。
+### 採用しなかった案
+値の行を自分で探す読み手を書く案。標準のライブラリだけで済ませる方針に合わず、誤りのもとになります。
+:::
+
+:::decision 知らない項目と二重の登録 status=決定済み date=2026-11-26
+### 決定
+知らない項目は誤りにします。同じ `id` に加え、同じ道筋の二重の登録も止めます。`--ref` を足します。
+### 理由
+打ち間違い（`journal_dri` など）を黙って既定値で動かすと、日誌が思わぬ場所にできます。同じrepositoryを2回登録すると、同じ日誌が2つできます。
+### 影響
+後のIssueが設定に項目を足すときは、`shipcast.config` の型と規則の表に足します。
+:::
+
+## 試験
+
+:::datatable 試験の一覧
+| ID | 確かめること | 要件 |
+|---|---|---|
+| T-01 | D-02 の見本を読むと、全項目が型と値になる | R-01 |
+| T-02 | 空・一部だけのファイルで、既定値が入る | R-01 |
+| T-03 | `SHIPCAST_CONFIG`、なければ `~/.config/shipcast/config.toml` を読む | R-01 |
+| T-04 | `[[repos]]` を書いた順に返し、省いた項目は既定値 | R-01 |
+| T-05 | 文法の誤りで、道筋・`line 3`・直し方を示す | F-01 |
+| T-06 | 値の誤り（15種類ほど）で、項目の名前と直し方を示す | F-01 |
+| T-07 | ファイルがないと作り方を示し、既定の内容は空と等しい | F-02、R-04 |
+| T-08 | 登録して、末尾に1件増える。`--id`・`--title`・`--ref` | R-02 |
+| T-09 | コメントや空行のある既存の中身が、バイト単位で残る | R-02 |
+| T-10 | SpecDockがない・道筋がないと、作らず変えずに1 | R-02 |
+| T-11 | 同じ id・同じ道筋は、変えずに1 | R-02 |
+| T-12 | ないときは作ってから足す | R-04 |
+| T-13 | 壊れた設定・`repos = [...]` の形には、変えずに1 | F-01、R-02 |
+| T-14 | 特殊な文字の往復、id の作り方、対象に書かない、記号のリンク | R-02、R-04 |
+| T-15 | `repo list` が登録の順にタブ区切りで出す | R-03 |
+| T-16 | 0件のときは、標準出力が空で、登録の仕方を示す | R-03 |
+| T-17 | ない・壊れたときの `repo list` は1。ほかの葉は未実装のまま | R-03、F-01、F-02 |
+:::
+
+:::warning 試験は架空のdataだけ
+このrepositoryはpublicです。試験は、`tmp_path` の下に偽のrepository（`spec-dock/workspace.json` だけを置いたディレクトリ）と設定を作り、`HOME` と `SHIPCAST_CONFIG` をそこへ向けます。本人の `~/.config/shipcast/` や実在のrepositoryの名前には触れません。外部のコマンドもモデルも呼びません。
+:::
+
+## 進め方と関門
+
+:::steps
+1. **仕様** — タスク担当（Claude Opus 5.5 / medium）が要件・設計・計画とこの資料を書き、`spec-reviewer`（Opus 5.5 / high）のレビューに合格させる
+2. **S-01 読む側** — 型、置き場、読み込みと検証、`ConfigError`（T-01〜T-07）
+3. **S-02 repo add** — 確かめと書き足し、既定の内容での作成（T-08〜T-14）
+4. **S-03 repo list** — 一覧と、未実装の一覧の更新（T-15〜T-17）
+5. **最終品質ゲート** — `quality-gate-reviewer`（Opus 5.5 / medium）。観点は正しさ・要件の閉じ・試験の十分さ・APIの約束・失敗からの回復。全 `test_commands` が通る
+6. **PRとCI** — PRを作り、GitHub ActionsのCIの合格を観測して統括に報告する。マージは統括が行う
+:::
+
+:::raci
+| 作業 | 本人 | 統括（Antigravity） | タスク担当（Claude） | 実装担当（Codex GPT-6.2 Sol） |
+|---|---|---|---|---|
+| 仕様と説明資料 | I | C | A | I |
+| S-01〜S-03 の実装（TDD） | I | I | A | R |
+| 最終品質ゲート | I | I | A | C |
+| PRとCIの観測 | I | I | A | I |
+| マージと work finish | I | A | I | I |
+:::
+
+:::terminal title="test_commands（この順に、すべて終了コード0）"
+$ uv sync --locked
+$ uv run ruff check
+$ uv run pytest -q
+$ uv run shipcast --help
+$ uv run shipcast repo --help
+:::
+
+区切りのレビューはありません（standard の既定。手順は3つで、後の多くの手順が頼る境界はこのIssueの中にありません）。要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>
