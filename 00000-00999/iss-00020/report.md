@@ -49,19 +49,19 @@ ID: "iss-00020"
 
 ### 最終品質ゲート
 
-- **合格**（1回目）。campaign `.workbench/final-quality-gate/iss-00020-fqg-1/`、`closure.md`。合格のコミット `31be37f085cb57540255eba3ddfcc0ded9d1c413`
+- **合格**。campaign `.workbench/final-quality-gate/iss-00020-fqg-1/`、`closure.md`。1回目 `31be37f` で合格の後、統括の承認で `origin/main`（PR #35 の iss-00021）を merge commit `f46f7a3d4a0de82db70b51a80edb3edf47f7cbea` で取り込み（`tests/test_cli.py` の未実装の一覧の衝突を、`run` と `draft x` の両方の行を外して解消）、2回目 `f46f7a3` でも合格（P0〜P3 0、876 passed）。**合格のコミットは `f46f7a3`**
 - `quality-gate-reviewer`（Opus 5.5 / medium）：P0 0・P1 0・P2 0・P3 0、coverage_complete true（観点 functional-correctness・requirements-closure・test-adequacy・security-baseline）。実装担当が足した POSIX flock も害なしと確認
 - 試験：`uv sync --locked` 0、`uv run ruff check` 0、`uv run pytest -q` 0（848 passed）
 - 説明資料：ヘッドレスの Chrome で描画し、PlantUML の図が `data-status="success"` で描けることを確かめた
 
 ### PR と CI
 
-- PR https://github.com/chemitaro/shipcast/pull/36（`chemitaro/iss-00020` → `main`、head `31be37f`、`Refs #20`）
-- CI：観測中
+- PR https://github.com/chemitaro/shipcast/pull/36（`chemitaro/iss-00020` → `main`、head `f46f7a3`、`Refs #20`）
+- CI：1回目の観測（head `31be37f`）は PR が CONFLICTING で CI が起動せず `STARTUP_GRACE_EXPIRED`（exit 2）。取り込みの後の `watch-pr-checks` は exit 0、OBSERVED_CI_PASS、Actions の `ci` run 45847104409 success（head `f46f7a3`）、merge_readiness READY（MERGEABLE・CLEAN、2026-11-26T15:15:55Z）。マージは統括
 
 ## Residual Risks / Follow-ups
 
 - 公開範囲・NGワードによる絞り込みがまだない。書き手に渡す項目を `title`・`what`・`why` に絞り、経路の伏せ字と本人の確認に任せる
 - 消化を戻すコマンドがない（台帳の `consumed` を0にすれば戻る）。下書きを置いた後の消化で落ちると、下書きはあり話題は未消化のまま残る
 - スキームのないドメインは X の URL の数え方で数えない（仕様レビューの P3）。非 POSIX では同時実行の直列化がない
-- 並行の iss-00021 も `cli.py` と `tests/test_cli.py` の未実装の一覧を変えるので、隣り合う行で衝突し得る
+- 並行の iss-00021 との `tests/test_cli.py` の衝突は、取り込みで解消済み
