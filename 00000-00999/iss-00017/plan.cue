@@ -33,7 +33,7 @@ steps: {
 		realizes: ["R-01", "R-02", "R-03", "F-01", "F-02", "F-04", "F-05"]
 		after: ["S-02"]
 		session: "impl"
-		status:  "doing"
+		status:  "done"
 	}
 	"S-04": {
 		title: "READMEの手順と、ブラウザーでの描画の確かめ"

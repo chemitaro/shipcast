@@ -32,7 +32,7 @@ steps: {
 		realizes: ["R-03"]
 		after:    ["S-03"]
 		session:  "impl"
-		status:   "doing"
+		status:   "done"
 	}
 }
 

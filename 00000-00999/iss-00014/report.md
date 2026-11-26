@@ -28,11 +28,19 @@ ID: "iss-00014"
   - SR-P2（spec-reviewer）：決定14の例外（Q-01 の本人の採用）が、AGENTS.md の決めた置き場 `content/decisions/` にない。この Issue の変えるファイルの外なので、統括に申し送る（本人の採用の記録を `content/decisions/` に足すかは統括と本人が決める）
   - CG-P2（ChatGPT）：RD-04 は、区切りの後の空白として ASCII のスペースとタブだけを読むので、`TOKEN=\r\n` の `\r` や全角の空白だけの値も `[伏せた]` にする（伏せすぎで、漏れはない）。申し送り：D-01 のコードのとおりに実装し、T-02 の「空白だけの値は変わらない」は ASCII のスペースとタブの場合として確かめる（解釈。`## 逸脱と判断` に記録する）
 
+### 区切りのレビュー CP-1（2026-11-26）
+
+- 結果：**合格**（1回目。P0 0件、P1 0件、P2 0件、P3 0件。`validate-review.py` exit 0、status pass）
+- 範囲：`f68349a24851528b6c42e4f0ad6e84388e29ea91..31a643cc0c2b5013a876362f43993cef56fd92c2`（S-01〜S-03。clean。branch を通常の push で公開）
+- レビュアー：Claude `code-reviewer`（Opus 5.5 / medium、axis both）。タスク担当が `31a643c` で `uv run ruff check` と `uv run pytest -q`（308 passed）の合格を確かめてから依頼した
+- 結果のファイル：shipcastの `.workbench/code-review/iss-00014-cp1/round-1.json`、`round-1.check.json`
+
 ## Outcome
 
 - S-01 `55cd0ee36be55027a8f1ec7a76a72bfb5b165ecb`。文章・JSONの伏せる処理（T-02）。
 - S-02 `03ff1fdb60e6ac65c3492c5846fd54314d1def13`。エージェントの印の検出（T-04 の関数）。
 - S-03 `31a643cc0c2b5013a876362f43993cef56fd92c2`。4経路、共通の入口、エラー処理、runner（T-01、T-03〜06、T-08〜10）。
+- S-04 `7cdb3715a0491bfcb9395c7b0f22cf71fee4a972`。設定見本の分析モデルの行に `gpt-6-luna` と確認コマンドの注記を追加し、T-07 で解析後の設定が `ModelConfig("codex", "gpt-6.2-sol", "low", None)` のままであることを確認。
 
 ## Verification
 
@@ -40,6 +48,8 @@ ID: "iss-00014"
 - S-01。Red は `uv run pytest -q tests/test_redact.py::test_redact_text --maxfail=1`（関数を提供するモジュールなし）、`uv run pytest -q tests/test_redact.py -k 'json or non_string'`（文の層だけでは5件失敗）。Green は文の層28件、JSON・型12件。最後に `uv run ruff check` と `uv run pytest -q tests/test_redact.py`（40件）が成功。
 - S-02。Red は `uv run pytest -q tests/test_models.py --maxfail=1`（関数を提供するモジュールなし）。Green は `uv run pytest -q tests/test_models.py`（10件）。`uv run ruff check` と `uv run pytest -q tests/test_redact.py tests/test_models.py`（50件）が成功。
 - S-03。Red → Green は `uv run pytest -q tests/test_models.py -k <選択>`。経路の選択と fake は10失敗 → 10合格、runner は5失敗 → 5合格、環境の守りは24失敗 → 34合格、CLIの呼び方と伏せる境界は10失敗 → 11合格、応答と失敗は22失敗 → 25合格、長さと UTF-8 はそれぞれ1失敗 → 合計5合格、timeoutの型と応答の Unicode 改行は3失敗 → 7合格。最後に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q tests/test_redact.py tests/test_models.py`（143件）、`uv run pytest -q`（308件）が成功。CLIの呼び方は偽の runner で確認。
+
+- S-04。CP-1 合格後に着手し、`uv run pytest -q tests/test_config.py::test_default_analyst_model_documents_cheaper_option` が注記なしで1件失敗、注記を足して1件合格。順に `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が成功（309件）。`uv run pytest -q tests/test_config.py`（26件）と `git diff --check f68349a HEAD` も成功。
 
 ## 逸脱と判断
 
