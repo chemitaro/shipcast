@@ -29,8 +29,9 @@ ID: "iss-00008"
 
 ### 最終品質ゲート（2026-11-26）
 
-- 結果：**合格**（1回目。P0 0件、P1 0件、P2 0件、P3 0件、coverage complete）
-- 合格のコミット：`67655991b9eef113183293dcfeaf355f8b136851`（範囲 `606bec3..6765599`、S-01〜S-04）
+- 結果：**合格**（attempt 02。P0 0件、P1 0件、P2 0件、P3 0件、coverage complete）
+- 合格のコミット：`f6b79b57ccf41535337db47ff2eb57e70fcc30ac`（範囲 `606bec3..f6b79b5`）
+- 経緯：attempt 01（`67655991`）は合格したが、PR #23 の CI（run 45799984159）が `astral-sh/setup-uv@v10` を解決できず失敗。`f6b79b5` で `v10.4.0` に固定し、attempt 02 で範囲全体を再レビュー・再テストして合格
 - レビュアー：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。観点 functional-correctness、requirements-closure、test-adequacy。second_opinion none（light）
 - テスト：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（25 passed）、`uv run shipcast --help` がすべて exit 0
 - 記録：shipcastの `.workbench/final-quality-gate/iss-00008-fqg-1/closure.md`
@@ -65,5 +66,5 @@ ID: "iss-00008"
 
 ## Residual Risks / Follow-ups
 
-- T-08（PR上のCIの合格）は PR を作った後に観測して追記する。
+- T-08：PR #23（https://github.com/chemitaro/shipcast/pull/23）で `ci` run 45800494389（pull_request、`f6b79b5`）が success。`github-pr-checks` の観測は OBSERVED_CI_PASS、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（2026-11-26T10:22:21Z）。外部の CheckRun は観測の範囲外。
 - マージと `spec-dock work finish` は統括が行う。
