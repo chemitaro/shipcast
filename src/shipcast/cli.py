@@ -8,6 +8,7 @@ from shipcast import __version__
 
 from shipcast import repo  # isort: skip
 from shipcast import run as run_command  # isort: skip
+from shipcast import schedule  # isort: skip
 from shipcast import serve  # isort: skip
 from shipcast import write  # isort: skip
 from shipcast.collect import command as collect_command  # isort: skip
@@ -51,7 +52,10 @@ COMMANDS = (
     Command(
         Entry("schedule", "日誌作成のスケジュールを管理する"),
         "iss-00022",
-        (Entry("install", "スケジュールを登録する"), Entry("uninstall", "スケジュールを解除する")),
+        (
+            Entry("install", "スケジュールを登録する", schedule.configure_install),
+            Entry("uninstall", "スケジュールを解除する", schedule.configure_uninstall),
+        ),
     ),
 )
 
