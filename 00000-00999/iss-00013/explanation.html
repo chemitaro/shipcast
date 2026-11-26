@@ -10,26 +10,234 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00013 Orcaの会話の記録を集める（任意の連携）
-lead: そのrepositoryでのその日の本人とエージェントの会話を集めます。Orcaがないときは警告だけで続けます。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
+lead: そのrepositoryで、その日に動いた本人とエージェントの会話を、日誌の素材（Event）として集めます。読むのは `orca` の機械向けのJSONだけで、Orcaが使えないときは警告だけを残して、ほかの収集を続けます。
+category: 説明資料（Issue・light）
+audience: このIssueのタスク担当・実装担当、統括、後で日誌の段を作る担当
 status: 仕様を確定
+updated: 2026-11-26
+docid: iss-00013
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-そのrepositoryでのその日の本人とエージェントの会話を集めます。Orcaがないときは警告だけで続けます。親のE2の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 最初に、Orca CLIでpathと時刻で絞って読む方法を確かめる
-- 設定の `orca = false` では集めない
+:::summary
+- このIssueが、日誌の素材の3つの出所のうち、どこを受け持つか
+- 「そのrepositoryの会話」と「その日の会話」を、Orcaの出力からどう決めるか
+- 読む3つのコマンドと、1つの会話から作るEventの中身
+- Orcaがない・動いていない・読めないとき、どう続けるか
+- 実際の会話を使わず、架空の見本で試験する方法
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`light`** です。会話は `orca agent list --json`（`worktreeId` のpathと `updatedAt` で絞る）と `orca agent read <id> --limit 100 --json`（`kind` が `message` の発言だけ）で読みます。発言そのものには時刻がないので、その日の判定は会話の `updatedAt` で行います。
+## 背景：3つ目の出所、Orca
+
+shipcastは、登録したrepositoryで1日に起きたことを集め、日誌にします。素材の出所は Git・SpecDock・Orca の3つで、出所ごとに「collector」が1つあります。
+
+:::cards cols=3
+### Git {icon=branch badge=iss-00011}
+正本のbranchに入ったcommitとmerge。`main` に入り済みです。
+
+### SpecDock {icon=list badge=iss-00012}
+Scopeの作成と終了、本人待ちのtodoの登録と完了。`main` に入り済みです。
+
+### Orca（任意） {badge=iss-00013}
+その日の、本人とエージェントの会話。**このIssue**です。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+collectorの共通の約束は `shipcast.collect.base` にあります。このIssueは、その約束に従う `OrcaCollector` を1つ書き、登録の `COLLECTORS` に1行足すだけです。`shipcast collect` の表示や保存の仕組みは変えません。
+
+:::note iss-00011 からの申し送り
+- `Collector.collect` の引数は `(repo, day, tz)` です（親の E2 の設計の `(repo, day)` から変わりました）。
+- 登録の `COLLECTORS` は `shipcast.collect`（`__init__.py`）にあり、順は git、specdock、orca です。
+:::
+
+:::note なぜ「任意」なのか
+Orcaは本人が毎日使う道具ですが、shipcastの利用者全員が使うとは限りません。そこで、Orcaの収集は失敗しても日誌を止めない「おまけ」の出所にしています。設定の `orca = false` のrepositoryでは、`orca` のコマンドを一度も呼びません。
+:::
+
+## 全体の流れ
+
+```plantuml id=flow
+@startuml
+title OrcaCollector.collect(repo, day, tz) の流れ
+participant "collect_repo\n(base.py)" as RUN
+participant "OrcaCollector\n(orca.py)" as OC
+participant "orca" as CLI
+RUN -> OC : collect(repo, day, tz)
+alt repo.orca が false
+  OC --> RUN : 空（何も呼ばない）
+else Orcaを使うrepository
+  OC -> CLI : agent list --json
+  CLI --> OC : 会話の一覧（worktreeId、updatedAt、題名）
+  OC -> CLI : repo list --json
+  CLI --> OC : Orcaに登録したrepositoryのIDとpath
+  OC -> OC : そのrepositoryの、その日に動いた会話を選ぶ
+  loop 選んだ会話ごと
+    OC -> CLI : agent read orca_session_id:<id> --limit 100 --json
+    CLI --> OC : 記録（発言と道具の呼び出し）
+  end
+  OC -> OC : 発言だけを残し、1会話を1件のEventにする
+  OC --> RUN : CollectResult(events, warnings)
+end
+@enduml
+```
+
+## 「そのrepositoryの会話」の決め方
+
+Orcaの会話の一覧では、どの会話も `worktreeId` を持ちます。形は `<repo-id>::<path>` です。
+
+:::warning pathだけでは足りない理由
+Orcaは、作業用のworktreeを、登録したrepositoryのpathの**外**に作ります（例：本体は `/home/dev/demo-app`、worktreeは `/home/dev/worktrees/demo-app/feature-x`）。pathの前方一致だけで選ぶと、worktreeでの会話がすべて漏れます。そこで、Orcaに登録したrepositoryの一覧（`orca repo list`）から、`repo.path` と同じpathのrepositoryのIDを取り、`worktreeId` の前半（`<repo-id>`）で結びつけます。
+:::
+
+次のどちらかに当たる会話を、そのrepositoryの会話とします。
+
+:::datatable そのrepositoryの会話（架空の例。`repo.path` は `/home/dev/demo-app`、Orcaのrepository ID は `1111…`）
+| `worktreeId` | 入るか | 理由 |
+|---|---|---|
+| `1111…::/home/dev/demo-app` | 入る | pathが同じ |
+| `1111…::/home/dev/worktrees/demo-app/feature-x` | 入る | `<repo-id>` が同じ（pathの外のworktree） |
+| `9999…::/home/dev/demo-app/sub` | 入る | pathの配下 |
+| `9999…::/home/dev/demo-app-old` | 入らない | 前方だけ同じで、配下ではない |
+| `2222…::/home/dev/other-app` | 入らない | ほかのrepository |
+| `folder:abcd` | 入らない | folderのworkspace（`::` がない） |
+:::
+
+`orca repo list` が読めないときは、警告を出して、pathの一致だけで選びます。
+
+## 「その日の会話」の決め方
+
+Orcaの発言には時刻がありません。そこで、会話の一覧の `updatedAt`（最後に動いた時刻。ミリ秒）がその日の範囲にある会話を「その日に動いた会話」とします。その日の範囲は、設定の timezone の0時から翌日の0時の前までです（`day_bounds(day, tz)`）。
+
+:::datatable 日の境の扱い（架空の値、日 2026-11-26、tz Asia/Tokyo）
+| `updatedAt`（ミリ秒） | UTC | 日本時間 | その日か |
+|---|---|---|---|
+| `1795618799999` | 2026-11-25T14:59:59.999Z | 前日 23:59:59.999 | 入らない |
+| `1795618800000` | 2026-11-25T15:00:00Z | 当日 00:00:00 | 入る |
+| `1795705199999` | 2026-11-26T14:59:59.999Z | 当日 23:59:59.999 | 入る |
+| `1795705200000` | 2026-11-26T15:00:00Z | 翌日 00:00:00 | 入らない |
+:::
+
+:::note 日をまたぐ会話
+1つの会話が何日も続くと、その会話は**最後に動いた日**にだけ入ります（読めるのは最新の100件の記録までです）。翌日にまた動けば、翌日にも別のEventとして入ります。EventのIDに日を入れて（`conversation:<id>:2026-11-26`）、保存の重複の除き（同じIDの二度目は捨てる）で翌日の分が捨てられないようにしています。
+:::
+
+## 読む3つのコマンド
+
+呼ぶ外部のコマンドは、次の3つの形だけです。どれも読むだけで、会話を起こしたり、Orcaの状態を変えたりしません。
+
+:::terminal title="OrcaCollector が呼ぶコマンド（IDは例）"
+$ orca agent list --json
+$ orca repo list --json
+$ orca agent read orca_session_id:00000000-0000-4000-8000-000000000001 --limit 100 --json
+:::
+
+:::keyvalue 使う項目
+- `agent list` : `result.agents[]` の `orcaSessionId`、`kind`、`agent`、`worktreeId`、`workspace`、`title`、`updatedAt`。`result.truncated`
+- `repo list` : `result.repos[]` の `id`、`path`
+- `agent read` : `result.limited`、`result.entries[]` の `kind`、`role`、`text`
+- 外側 : 成功でも失敗でも1つのJSONの物。失敗では `ok` が false で、`error` に `code` と `message`
+:::
+
+## Eventの中身
+
+1つの会話を1件のEventにします。本文には、`role` が `user`（本人やOrcaからの依頼）と `assistant`（エージェント）の発言だけを、古い順に入れます。道具の呼び出し（`kind` が `tool`）と `system` の知らせは入れません。
+
+:::keyvalue Eventの形（`source` は `orca`、`kind` は `conversation`）
+- `id` : `event_id("orca", repo.id, "conversation:<orcaSessionId>:<日>")`
+- `at` : 会話の `updatedAt`（UTC）
+- `title` : 会話の題名（空なら `（題名のない会話）`）
+- `actor` : エージェントの種類（`claude`、`codex` など）
+- `refs` : `orca_session_id:<orcaSessionId>`
+:::
+
+:::terminal title="本文の例（架空の会話）"
+会話: orca_session_id:00000000-0000-4000-8000-000000000001（claude、chat）
+workspace: feature-x
+（最新の100件の記録だけを読みました）
+
+[user]
+ログイン画面の文言を直してください。
+
+[assistant]
+文言を直し、試験を足しました。
+:::
+
+`（最新の100件の記録だけを読みました）` の行は、Orcaが記録を途中で切ったとき（`limited` が true）だけ書きます。発言が1つも残らない会話は、Eventにしません。
+
+## 失敗したときの動き
+
+Orcaは任意の連携なので、どの失敗も `CollectError`（そのrepositoryの失敗）にせず、**警告**にとどめます。Git・SpecDockの出来事とほかのrepositoryは、そのまま保存されます。
+
+:::datatable 失敗と動き（F-01）
+| どこで | 起きること | 動き |
+|---|---|---|
+| `agent list` | `orca` がない・Orcaが動いていない・時間切れ・失敗の物・壊れたJSON・形が違う | 警告 `Orcaの会話の一覧を読めませんでした: …`。会話は0件 |
+| `agent list` | 一覧が途中まで（`truncated`） | 警告を足して続ける |
+| `repo list` | 読めない | 警告 `Orcaのrepositoryの一覧を読めませんでした: …`。pathの一致だけで選ぶ |
+| `agent read` | 1つの会話が読めない | 警告 `Orcaの会話を読めませんでした（orca_session_id:…）: …`。その会話だけを飛ばす |
+:::
+
+## 試験の方法
+
+:::steps
+1. `orca` の実際の出力の形（項目の名前と入れ子）を写した見本を、`tests/fixtures/orca/` に置きます。値は**すべて架空**です（path `/home/dev/demo-app`、作ったUUID、作った題名と発言）。手元の実際の会話・題名・path・セッションIDは写しません。
+2. 試験は `subprocess.run` を偽物に置き換え、呼ばれた argv に応じて見本を返し、argv を記録します。本物の `orca` は使いません。
+3. 偽物に、コマンドがない・時間切れ・失敗の物・終了コード1・壊れたJSONを起こさせ、警告だけで続くことを確かめます。
+4. 本物の `collect_repo` と `Store` に通し、約束に合うこと（誤りなしで保存され、二度目は0件、別の日は別のID）を確かめます。
+:::
+
+:::datatable 試験と要件
+| 試験 | 確かめること | 要件 |
+|---|---|---|
+| T-01 | そのrepositoryの選び方、日の境の4つの時刻、発言の絞り込み、Eventの各項目 | R-01 |
+| T-02 | 呼んだコマンドが3つの形だけ。`collect_repo` で保存でき冪等。別の日は別のID。登録の順 | R-01 |
+| T-03 | `orca = false` で何も呼ばない | R-02 |
+| T-04 | 各コマンドの失敗で警告になり、`CollectError` にならない | F-01 |
+:::
+
+## 作るファイルと手順
+
+:::tree
+src/shipcast/collect/orca.py          # + OrcaCollector
+src/shipcast/collect/__init__.py      # ~ COLLECTORS に OrcaCollector() を足す
+tests/test_collect_orca.py            # + T-01〜T-04
+tests/fixtures/orca/agent-list.json   # + 架空の見本
+tests/fixtures/orca/repo-list.json    # + 架空の見本
+tests/fixtures/orca/agent-read-*.json # + 架空の見本（会話ごと）
+:::
+
+:::steps
+1. **S-01**：架空の見本と、試験の偽物の `subprocess.run` を作る。
+2. **S-02**：試験を先に書いて落ちることを確かめ、`OrcaCollector` と登録を書いて通す。
+:::
+
+## 担当と関門
+
+:::keyvalue
+- 保証レベル : **light**（collectorを1つ足すだけで、失敗してもOrcaなしで日誌ができる。読むだけで、PRを戻せば元に戻る）
+- タスク担当 : Claude Opus 5.5 / medium（統括が起動。仕様・説明資料・レビュー・最終品質ゲート・PR・CIの観測）
+- 実装担当 : Codex GPT-6.2 Sol / medium（S-01・S-02、TDD）
+- 仕様のレビュー : `spec-reviewer`（Opus 5.5 / medium）。P0・P1がなくなるまで
+- 区切りのレビュー : なし（手順は2つで、1人の実装担当が続けて書くため）
+- 最終品質ゲート : `quality-gate-reviewer`（Opus 5.5 / medium）。`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`
+- マージ : 統括が行う。タスク担当と実装担当はマージしない
+:::
+
+:::warning 公開のrepositoryであること
+shipcastはpublicです。試験の見本に、本物のOrcaの会話（非公開の製品の名前、個人の情報、手元のpath）を入れてはいけません。会話の本文は利用者の手元のSQLiteにだけ保存され、公開の方針での絞り込みは、後の段（日誌・発信）が受け持ちます。
+:::
+
+:::checklist このIssueの完了の確かめ
+- `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が通る
+- 見本から、そのrepository（pathの外のworktreeを含む）の、その日に動いた会話の発言だけがEventになる
+- `orca = false` では `orca` を呼ばない
+- Orcaがない・読めないときは警告だけで、`CollectError` にならない
+- 見本がすべて架空の値である
+- 最終品質ゲートとPRのCIが合格している
+- 統括に報告した（マージと `spec-dock work finish` は統括が行う）
+:::
+
+要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。この資料と食い違うときは、正本が優先します。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>
