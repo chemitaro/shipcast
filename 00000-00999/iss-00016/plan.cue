@@ -11,7 +11,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "doing"
+		status:   "done"
 		title:    "数（`count_metrics`）、組み立て（`build_entry`）と拡張点、置き換え（`write_atomic`）"
 		text:     "D-03・D-04・D-05・D-06。T-04〜T-08 を先に書いて Red、`Metric`・`count_metrics`・`_inline`・`build_entry`・`JournalExtension`・`EXTENSIONS`・`write_atomic` を書いて Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-02", "R-03", "R-04", "R-05", "F-01", "F-02"]
@@ -19,7 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
-		status:   "todo"
+		status:   "doing"
 		title:    "書き手への依頼（`compose`）、1日の流れ（`write_day`）、CLI `shipcast write`"
 		text:     "D-02・D-07。T-09〜T-12 を先に書いて Red、`MAX_ATTEMPTS`・`WriteFailed`・`compose`・`WriteResult`・`write_day`・`configure`・`run` を書き、`cli.py` の `write` の葉に `write.configure` を渡し、`tests/test_cli.py` の未実装の一覧から `write` を外して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02", "R-03", "F-01", "F-02"]

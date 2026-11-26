@@ -29,10 +29,15 @@ ID: "iss-00016"
 - S-01 — `54373b30b5038489de9d29507fbb8e28a6f7a5f9`。書き手の入力指示と応答の検査を追加。検査を JSON 全体と各フィールドに分け、エラー文には応答の値を載せない。引用内の `> ===` はレビュー時の申し送りどおり許容する。
 - 外部モデルを呼ばない作業条件に合わせ、ステージ済み差分の確認後に日本語のメッセージを手書きして通常の `git commit` を使用。
 
+- S-02 — `00d24f751d4bb54fcb766dc720aa6bf24f393b71`。4つの数、前付け・本文・拡張点の囲み、ファイルの置き換えを追加。集計は最初に現れた同一 ID を採用し、数を書き出す順は固定。文字参照には `html.escape(quote=False)` を使い、先頭の太字・インラインコードの印は申し送りどおり打ち消す。
+
 ## Verification
 
 - 基準（`36eea14aef0ad8e5039398dd98c8fed24e6e9abb`） — `shasum -a 256` はレビュー合格の3ファイルと一致。`uv sync --locked`・`uv run ruff check`・`uv run pytest -q` はすべて終了コード0、671 passed。記録は `.workbench/implement/iss-00016/start.md`。
 - S-01 Red — `uv run pytest -q tests/test_write.py` の対象を `-k` で選択。`reads_plain` は公開モジュール未実装で3件失敗、`invalid_json` は未検査で6件失敗、`field_errors or all_fields or story_markdown` はフィールド検査未実装で37件失敗・許容例1件成功、`packaged` はリソース未配置で1件失敗。
 - S-01 Green — 同じ対象で順に3・6・38・1件が成功。`uv run pytest -q tests/test_write.py` は48 passed、`uv run ruff check`・`git diff --cached --check` は終了コード0。コミット後の作業ツリーは clean。
+
+- S-02 Red — `uv run pytest -q tests/test_write.py` の対象を `-k` で選択。数は `Metric` 未実装で1件、本文は `build_entry` 未実装で13件・空日1件、拡張点は登録と引数が未実装で2件、置き換えは `write_atomic` 未実装で3件失敗。
+- S-02 Green — 数1件、本文と空日14件、拡張点2件、置き換え3件が成功。`uv sync --locked`・`uv run ruff check`・`uv run pytest -q`・`git diff --cached --check` はすべて終了コード0、739 passed。コミット後の作業ツリーは clean。
 
 ## Residual Risks / Follow-ups
