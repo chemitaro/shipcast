@@ -2,6 +2,7 @@ import re
 import subprocess
 import sys
 from importlib.metadata import version
+from pathlib import Path
 
 import pytest
 
@@ -123,3 +124,13 @@ def test_version_shows_installed_version(capsys):
     output = capsys.readouterr()
     assert output.out == f"shipcast {version('shipcast')}\n"
     assert output.err == ""
+
+
+def test_ci_runs_local_checks_for_pull_requests_and_main_pushes():
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "\non:\n  pull_request:\n  push:\n    branches: [main]\n" in workflow
+    assert "\npermissions:\n  contents: read\n" in workflow
+    checks = ("uv sync --locked", "uv run ruff check", "uv run pytest -q")
+    assert "".join(f"      - run: {check}\n" for check in checks) in workflow
