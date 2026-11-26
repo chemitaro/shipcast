@@ -24,6 +24,21 @@ ID: "iss-00021"
 - 2回目の P3（直さず申し送り）：モデルの経路を作れないとき（D-01 の手順6）、`runs` には repositoryごとの `failed` を書くが、標準出力に repositoryごとの失敗の行と件数の行が出ない。実装担当の裁量で出してよい
 - 結果のファイル：shipcastの `.workbench/spec-review/iss-00021/`（`round-1.json`・`round-2.json` と `.check.json`、`review-response.md`）
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（キャンペーン `iss-00021-fqg-1` の attempt 01）
+- 合格のコミット：`f8182d7f215486466d35b00f619d841799366402`（範囲 `ef3075f..f8182d7`、clean）
+- 主：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。pass、P0 0・P1 0・P2 0・P3 0、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（820 passed）がすべて exit 0（タスク担当の試験レーン）
+- 2人目：none（standard）
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00021-fqg-1/closure.md`
+
+### PR と CI（2026-11-26）
+
+- PR：https://github.com/chemitaro/shipcast/pull/35（`chemitaro/iss-00021` → `main`、`Refs #21`、自動で閉じる語句なし）。head `f8182d7f215486466d35b00f619d841799366402`（合格のコミットと同じ。記録のみのコミットなし）
+- CI：`github-pr-checks` の observer で exit 0、`OBSERVED_CI_PASS`（2026-11-26T14:54:34Z）。Actions の `ci`（run 45843506926、event pull_request、head f8182d7）が success。coverage ACTIONS_AND_COMMIT_STATUSES、expected_inventory UNSPECIFIED、merge_readiness READY
+- マージと `spec-dock work finish` は統括が行う
+
 ## Outcome
 
 - S-01 `bca2662`。前日・指定日と対象 repository の選択を CLI に接続し、収集・日誌作成・repository ごとの実行記録をつないだ。入口と各 repository の失敗を扱い、処理中の一件の失敗で残りを止めない。
