@@ -42,6 +42,17 @@ ID: "iss-00017"
 - 新しい P2（情報）：配信する ds.js は登録した repository（または `design_system_dir`）のもので、T-05 はこの repository の ds.js の版とだけ比べる。本人の repository の SpecDock が部品の版を上げると、図と色分けが描けなくなる（本文は描ける）。残りのリスクに記録
 - ほかの P2/P3 は round 1 と同じ（申し送り済み）
 
+### 仕様のレビュー round 3（2026-11-26、仕様の変更。上限の最後の回）
+
+- 理由：round 2 の ChatGPT（GPT-6 / Extra High、session `required-strict-github-connector-verificati-1565`、canonical `1c440c0`）の P1 3件。(1) 元からある `<\/script`・CR・NUL が保たれないのに R-01 が「元に戻る」と言い切っていた (2) Host の点のない1語の名前は DNS の検索ドメインで外の名前になりうる (3) `%2f` を復号してから分けるので、親 epic-00005 の F-02 の「符号化した `%2f` を拒む」と食い違う。3件とも正しいと判断（`.workbench/spec-review/iss-00017/review-response.md`）
+- 変更：D-01 に保たれない変換を明記し R-01 を限定。D-05・F-05・T-08 で1語の名前を受けない。D-03・F-02 で生の `/` で分けてから部分ごとに復号し、復号した部分の `/`・`\`・NUL を拒む。T-03・T-01 に例を足す
+- 固定した文書（sha256）：
+  - `requirement.cue`：`d0442a3631d2efda6402dc3e23ead2798e367dc7ff50d48cdf36ead78ce6e9c9`
+  - `design.cue`：`5ffc5108c48e35313851faed10b1220fa7f86fcd6613c0ad075504f31e42cc97`
+  - `plan.cue`：`ff3f7a43bc688b22015d86a4fda0aee0eedb4f35440227ef131e96c06a5b38f4`
+- Claude `spec-reviewer`（同じレビュアー）：**合格**（P0 0、P1 0、P2 4、P3 3）。`round-3.json`、`round-3.check.json`（exit 0）。新しい P3：保たれない変換の一覧に、大文字の `</SCRIPT` が小文字になることが入っていない（D-01 の別の行に書いてある）
+- ChatGPT（同じ会話の続き、canonical `288c17e`）：結果は下に追記する
+
 ### 区切りのレビュー CP-1（2026-11-26）
 
 - 結果：**合格**（round 1。規約の観点 P0〜P3 0件、仕様の観点 P0〜P3 0件）
