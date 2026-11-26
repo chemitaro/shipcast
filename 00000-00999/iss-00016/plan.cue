@@ -4,14 +4,14 @@ goal: "書き手の応答の形とプロンプトを先に固め、その上に�
 
 steps: {
 	"S-01": {
-		status:   "doing"
+		status:   "done"
 		title:    "書き手のプロンプトと応答の形（`parse_draft`）"
 		text:     "D-01・D-08。T-01・T-02・T-03 を `tests/test_write.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/prompts/write.md` と、`src/shipcast/write.py` の `PROMPT_PATH`・プロンプトを読む関数・`Draft`・`parse_draft` を書いて通す（Green）。完了の条件：その試験が通り、`uv run ruff check` が通る。"
 		realizes: ["R-02", "F-02"]
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "todo"
+		status:   "doing"
 		title:    "数（`count_metrics`）、組み立て（`build_entry`）と拡張点、置き換え（`write_atomic`）"
 		text:     "D-03・D-04・D-05・D-06。T-04〜T-08 を先に書いて Red、`Metric`・`count_metrics`・`_inline`・`build_entry`・`JournalExtension`・`EXTENSIONS`・`write_atomic` を書いて Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-02", "R-03", "R-04", "R-05", "F-01", "F-02"]

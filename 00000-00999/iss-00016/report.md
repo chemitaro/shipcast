@@ -26,6 +26,13 @@ ID: "iss-00016"
 
 ## Outcome
 
+- S-01 — `54373b30b5038489de9d29507fbb8e28a6f7a5f9`。書き手の入力指示と応答の検査を追加。検査を JSON 全体と各フィールドに分け、エラー文には応答の値を載せない。引用内の `> ===` はレビュー時の申し送りどおり許容する。
+- 外部モデルを呼ばない作業条件に合わせ、ステージ済み差分の確認後に日本語のメッセージを手書きして通常の `git commit` を使用。
+
 ## Verification
+
+- 基準（`36eea14aef0ad8e5039398dd98c8fed24e6e9abb`） — `shasum -a 256` はレビュー合格の3ファイルと一致。`uv sync --locked`・`uv run ruff check`・`uv run pytest -q` はすべて終了コード0、671 passed。記録は `.workbench/implement/iss-00016/start.md`。
+- S-01 Red — `uv run pytest -q tests/test_write.py` の対象を `-k` で選択。`reads_plain` は公開モジュール未実装で3件失敗、`invalid_json` は未検査で6件失敗、`field_errors or all_fields or story_markdown` はフィールド検査未実装で37件失敗・許容例1件成功、`packaged` はリソース未配置で1件失敗。
+- S-01 Green — 同じ対象で順に3・6・38・1件が成功。`uv run pytest -q tests/test_write.py` は48 passed、`uv run ruff check`・`git diff --cached --check` は終了コード0。コミット後の作業ツリーは clean。
 
 ## Residual Risks / Follow-ups
