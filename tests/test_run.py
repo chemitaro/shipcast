@@ -1,7 +1,9 @@
 import errno
 import fcntl
 import json
-from datetime import UTC, date, datetime, time
+import sqlite3
+from contextlib import closing
+from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -10,7 +12,7 @@ import pytest
 from shipcast.cli import main
 from shipcast.collect.base import CollectError, CollectResult
 from shipcast.config import load_config
-from shipcast.model import Event, event_id, journal_path
+from shipcast.model import Event, event_id, journal_path, parse_journal
 from shipcast.models import RouteFailed, get_route
 from shipcast.state import Store
 
@@ -472,3 +474,41 @@ def test_run_preserves_diagnostics_and_adds_tcc_hint_when_applicable(
     assert (succeeded.result, succeeded.error) == ("ok", "")
     if failure == "missing-path":
         assert failed.error == f"git: {missing_path}: {diagnostic}"
+
+
+def test_rerunning_same_day_replaces_entries_without_duplicate_events(run_cli):
+    args = ["run", "--date", str(DAY)]
+    assert main(args) == 0
+
+    paths = {repo_id: journal_path(run_cli.journal_dir, repo_id, DAY) for repo_id in REPOS}
+    with Store(run_cli.state_dir) as store:
+        event_counts = {repo_id: len(store.events_for(repo_id, DAY, tz=TOKYO)) for repo_id in REPOS}
+        database_path = store.path
+    assert event_counts == {"demo-app": 1, "other-app": 1}
+    for path in paths.values():
+        meta, _ = parse_journal(path.read_text(encoding="utf-8"))
+        assert meta.generated_at == "2026-11-26T03:00:00+09:00"
+
+    run_cli.clock.current += timedelta(hours=1)
+    assert main(args) == 0
+
+    with Store(run_cli.state_dir) as store:
+        for repo_id, path in paths.items():
+            assert len(store.events_for(repo_id, DAY, tz=TOKYO)) == event_counts[repo_id]
+            meta, _ = parse_journal(path.read_text(encoding="utf-8"))
+            assert (meta.repo, meta.date) == (repo_id, DAY)
+            assert meta.generated_at == "2026-11-26T04:00:00+09:00"
+            entry = store.entry_for(repo_id, DAY)
+            assert entry is not None
+            assert entry.path == str(path)
+            assert entry.generated_at == run_cli.clock.current
+            records = store.runs_for(repo_id)
+            assert [(record.result, record.error) for record in records] == [("ok", ""), ("ok", "")]
+            assert [record.started_at for record in records] == [NOW, run_cli.clock.current]
+
+    assert set(run_cli.journal_dir.rglob("*.md")) == set(paths.values())
+    with closing(sqlite3.connect(database_path)) as database:
+        rows = database.execute(
+            "SELECT repo_id, date, COUNT(*) FROM entries GROUP BY repo_id, date ORDER BY repo_id"
+        ).fetchall()
+    assert rows == [(repo_id, str(DAY), 1) for repo_id in REPOS]
