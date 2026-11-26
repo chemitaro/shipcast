@@ -23,13 +23,13 @@ steps: {
 		realizes: ["R-01", "R-02", "R-03", "R-04"]
 		after:   ["S-01"]
 		session: "impl-ui"
-		status:  "doing"
+		status:  "done"
 	}
 }
 
 tests: {
-	"T-01": {title: "`markdown_text` が `string.punctuation` の32字をすべて `&#NN;` にし、英数字・空白・ASCIIでない字（日本語）を変えない。結果は `(?:[^!-/:-@\\[-`{-~]|&#[0-9]+;)*` に全体が合う", verifies: ["R-03"]}
-	"T-02": {title: "`index_markdown`：2つの repository の `latest` で `:::cards` の中に見出しが2つ、順が入力の順、見出しの行の末尾が `{href=/<repo>/<day> badge=<repo>,<day> more=この日を読む}`、本文が lead。`latest` が空なら `:::note まだ日誌がありません` と `shipcast run`。repos のリンク `/<repo>/`。`repo_markdown`：3日（2つの月にまたがる、1日は `meta` が `None`）で、月の見出しが新しい順に2つ、各 `:::timeline` の項目が新しい順、項目が `**[<day>](/<repo>/<day>)** — ` で始まり、`None` の日は固定の文、表紙へのリンク。`{href=https://evil.example}`・`## x`・`:::`・`**`・`[x](https://evil.example)`・`<img src=x onerror=alert(1)>` を含む題名と lead でも、見出しと項目の数が日の数と同じで、`evil.example` へのリンクの書き方（`](https://`、`href=https`）と `<img` が Markdown に出ない", verifies: ["R-01", "R-02", "R-03"]}
+	"T-01": {title: "`markdown_text` が `string.punctuation` の32字を、`&` は `&amp;`、ほかは `&#NN;` にし、`&amp;` を `&amp;amp&#59;` にし、英数字・空白・ASCIIでない字（日本語）を変えない。結果は `(?:[^!-/:-@\\[-`{-~]|&#[0-9]+;|&amp;)*` に全体が合う", verifies: ["R-03"]}
+	"T-02": {title: "`index_markdown`：2つの repository の `latest` で `:::cards` の中に見出しが2つ、順が入力の順、見出しの行の末尾が `{href=/<repo>/<day> badge=<day> more=この日を読む}`、本文が lead と `<repo> の日誌` の2段落。`latest` が空なら `:::note まだ日誌がありません` と `shipcast run`。repos のリンク `/<repo>/`。`repo_markdown`：3日（2つの月にまたがる、1日は `meta` が `None`）で、月の見出しが新しい順に2つ、各 `:::timeline` の項目が新しい順、項目が `**[<day>](/<repo>/<day>)** — ` で始まり、`None` の日は固定の文、表紙へのリンク。`{href=https://evil.example}`・`## x`・`:::`・`**`・`[x](https://evil.example)`・`<img src=x onerror=alert(1)>` を含む題名と lead でも、見出しと項目の数が日の数と同じで、`evil.example` へのリンクの書き方（`](https://`、`href=https`）と `<img` が Markdown に出ない", verifies: ["R-01", "R-02", "R-03"]}
 	"T-03": {title: "`split_path`：`/demo-app/` → `(\"demo-app\", \"\")`、`/_ds/vendor/` → `(\"_ds\", \"vendor\", \"\")`、`/demo-app//`・`//x`・`/a//b` → `None`、`/` → `()`。iss-00017 の表のほかの項目は変わらない", verifies: ["R-02"]}
 	"T-04": {title: "置き場を歩く関数：`journal_repos` が `.x`・`Demo`・ファイル・外への symlink のディレクトリを除いて名前の順。`journal_files` が新しい順で、`2026-02-30.md`・`2025/2026-01-01.md`（年が違う）・`.2026-11-01.md`・`notes.txt`・外への symlink のファイルと年のディレクトリを除く。`latest_journals` が前付けの壊れた最新の日を飛ばして次の日を取り、読めない日だけの repository を出さず、日付の新しい順。壊れた日で `on_error` が呼ばれる。置き場がないとき `[]`", verifies: ["R-01", "R-02", "F-01", "F-02"]}
 	"T-05": {title: "配信：`/` が200で `ds-source` に `:::cards` と2枚の見出し（新しい順）、置き場の外の symlink の印の文字列が応答に出ない。空の置き場・置き場がないときも200で `まだ日誌がありません`。`/demo-app/` が200で `:::timeline`、壊れた日の固定の文、`<title>` が `demo-app の日誌`。`/demo-app` が301で `Location: /demo-app/`。`/nothing/`・`/Demo/`・`/demo-app/2026-11-26/`・`/demo-app//`・`/_ds/` が404。どの応答にも `security_headers()` の3つ。`HEAD /` は同じ状態で本文が空。起動の表示が `http://<authority>/ で日誌を読めます`", verifies: ["R-01", "R-02", "F-01", "F-02"]}
