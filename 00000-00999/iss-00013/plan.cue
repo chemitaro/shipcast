@@ -8,7 +8,7 @@ steps: {
 		text:     "D-02、D-05。`tests/fixtures/orca/` に `agent-list.json`・`repo-list.json`・会話ごとの `agent-read-<名前>.json` を、D-02 の項目の名前と入れ子のまま、完全に架空の値で書く。見本には T-01・T-04 の場合（main checkoutの会話、登録したpathの外のOrcaのworktreeの会話（`<repo-id>` で結びつく）、配下のpathの会話、配下に入れ子に置かれた別のrepository（`repo list` に別のpathで登録）の会話、ほかのrepositoryの会話、folderのworkspaceの会話、日の境の4つの `updatedAt`、`tool` と `system` の記録、空白だけの発言、発言が0件の会話、`limited` が true の会話、題名が空の会話、同じ `orcaSessionId` の重複）を入れる。`tests/test_collect_orca.py` に、見本を読んで argv ごとに返し、argv を記録する偽物の `subprocess.run` を書く。完了の条件：見本がJSONとして読め、手元の実際のOrcaの記録から写した値（題名、発言、path、セッションID、repositoryの名前）がないこと（`rg` で確かめる）。`uv run ruff check` が通る。"
 		realizes: ["R-01"]
 		session:  "impl"
-		status:   "doing"
+		status:   "done"
 	}
 	"S-02": {
 		title:    "`OrcaCollector`（`shipcast.collect.orca`）と登録"
@@ -16,7 +16,7 @@ steps: {
 		realizes: ["R-01", "R-02", "F-01"]
 		after:    ["S-01"]
 		session:  "impl"
-		status:   "todo"
+		status:   "done"
 	}
 }
 
