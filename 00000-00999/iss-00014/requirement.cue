@@ -53,7 +53,7 @@ requirements: {
 		acceptance: [
 			"`fake`（`responder` を含む）・`codex`・`claude`・`antigravity` の全経路で、経路の実装に届くプロンプトとsystemの文字列（runner の引数・標準入力・一時ファイル、`responder` の引数）が、伏せた後のものになっている",
 			"`ghp_`・`gho_` などの GitHub のトークン、`github_pat_`、`sk-`、`AKIA`・`ASIA`、`xox[bp]-` などの Slack のトークン、`AIza` の Google の鍵、JWT、`Bearer` の後の値、URLの中の利用者:パスワード、`-----BEGIN ... PRIVATE KEY-----` の塊（閉じのないものは末尾まで）、`PASSWORD`・`TOKEN`・`SECRET` などを名前に含む鍵の `=` か `:` の後の値が、D-01 の表のとおり `[伏せた]` になる",
-			"秘密を含まない文（日本語の文、コード、`max_tokens` を含まない普通のログ）は変わらない。伏せた文字列をもう一度 `redact()` に通しても変わらない",
+			"秘密を含まない文（日本語の文、RD-04 の鍵の名前を含まないコードやログ）は変わらない。伏せた文字列をもう一度 `redact()` に通しても変わらない",
 		]
 	}
 	"R-03": {
