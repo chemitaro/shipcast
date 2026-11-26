@@ -44,7 +44,7 @@ steps: {
 		realizes: ["R-01", "R-03", "F-03", "F-04"]
 		after: ["S-03"]
 		session: "impl-ui-verify"
-		status:  "todo"
+		status:  "doing"
 	}
 }
 
