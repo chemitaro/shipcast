@@ -10,23 +10,209 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00008 CLIの骨組みと開発の土台
-lead: Pythonのpackageと `shipcast` のコマンドの骨組みを作り、試験と検査が回る状態にします。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+lead: shipcastの最初のコードです。Pythonのpackageと `shipcast` のコマンドの骨組み、手元とCIで同じに流す検証のcommandを入れ、ほかの14のIssueが自分の部分だけを書けばよい状態にします。
+category: 説明資料（Issue・light）
+audience: このIssueのタスク担当・実装担当、統括、ハッカソンの見学者
+status: 仕様のレビュー中
+updated: 2026-11-26
+docid: iss-00008
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-Pythonのpackageと `shipcast` のコマンドの骨組みを作り、試験と検査が回る状態にします。親のE1の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- `uv run shipcast --help` が7つの下位のコマンドを示す
-- `uv run pytest -q` と `uv run ruff check` が通る
-- `AGENTS.md` に検証のcommandが書かれる
+:::summary
+- このIssueが、なぜ最初に1人で入れるものなのか
+- 作るファイルと、`shipcast` のコマンドの形
+- 「未実装」の下位のコマンドの約束と、後のIssueの足し方
+- 手元とCIで流す3つの検証のcommand
+- 仕様からマージまでの関門と、担当の分け方
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+## なぜ最初に入れるのか
+
+shipcastのrepositoryには、まだコードがありません。このIssueは、全部のIssueが使う **入口**（`shipcast` のコマンド）と、**検証の約束**（`uv run pytest -q` と `uv run ruff check`）と、統括がマージの前に観測する **CI** を入れます。これが入ると、Wave 2 の iss-00009（設定）と iss-00010（型と状態）が並行に始められます。
+
+:::note 親の約束
+親の E1（epic-00002）の R-01「`shipcast` のコマンドが動き、下位のコマンドの骨組みがある」を、このIssueが受け持ちます。保証レベルは **light** です。コードのないrepositoryに骨組みを足すだけで、PRを戻せば元に戻るからです。
+:::
+
+## 作るファイル
+
+:::tree
+pyproject.toml                  # + name、requires-python >=3.12、scripts、dev依存、ruff・pytestの設定
+uv.lock                         # + Gitに入れる。CIは --locked で読む
+.python-version                 # + 3.12
+src/shipcast/__init__.py        # + __version__
+src/shipcast/__main__.py        # + python -m shipcast
+src/shipcast/cli.py             # + 入口と下位のコマンドの表
+tests/test_cli.py               # + T-01〜T-07
+.github/workflows/ci.yml        # + PRとmainへのpushで検証を流す
+AGENTS.md                       # ~ 「Gitと検証」に検証のcommandを書く
+:::
+
+実行時の依存はありません（標準のライブラリだけ）。開発の依存は `pytest` と `ruff` だけです。
+
+## `shipcast` のコマンドの形
+
+```plantuml id=cli
+@startuml
+title shipcast の下位のコマンドと、中身を作るIssue
+left to right direction
+rectangle "shipcast" as root
+rectangle "repo" as repo
+rectangle "add\n（iss-00009）" as add
+rectangle "list\n（iss-00009）" as list
+rectangle "collect\n（iss-00011）" as collect
+rectangle "write\n（iss-00016）" as write
+rectangle "run\n（iss-00021）" as run
+rectangle "serve\n（iss-00017）" as serve
+rectangle "draft" as draft
+rectangle "x\n（iss-00020）" as x
+rectangle "schedule" as schedule
+rectangle "install\n（iss-00022）" as install
+rectangle "uninstall\n（iss-00022）" as uninstall
+root --> repo
+repo --> add
+repo --> list
+root --> collect
+root --> write
+root --> run
+root --> serve
+root --> draft
+draft --> x
+root --> schedule
+schedule --> install
+schedule --> uninstall
+@enduml
+```
+
+下位のコマンドは `shipcast.cli` の表（`COMMANDS`）に1か所で登録します。各行は、名前、日本語の説明、その下のコマンド、中身を作るIssueのIDを持ちます。
+
+:::annotate 中身のない下位のコマンドの応答
+```text
+$ uv run shipcast collect --help        # (1)
+$ uv run shipcast collect
+shipcast collect: 未実装です（iss-00011 で作ります）   # (2)
+$ echo $?
+2                                         # (3)
+```
+1. 使い方の表示は、中身がなくても動きます
+2. 標準エラーに、どのIssueで作るかを示します
+3. 終了コードは2です。ファイルやディレクトリ（設定、状態、日誌の置き場）は何も作りません
+:::
+
+:::tip 後のIssueの足し方
+後のIssueは、`COMMANDS` の自分の行の葉の関数を差し替え、必要な引数をその行の中で足すだけです。ほかの行や入口には触りません。そのため、Wave 2 以降のIssueが同時に作業しても、ぶつかりにくくなります。
+:::
+
+知らない下位のコマンドや引数は、argparseの既定の動き（使い方を標準エラーに出して終了コード2）に任せます。
+
+## 検証のcommandとCI
+
+:::terminal title="手元とCIで、同じ3つを順に流す"
+$ uv sync --locked
+# uv.lock のとおりに環境を作る（lockが古ければ失敗する）
+$ uv run ruff check
+# 整形と検査（E、F、I、B、UP）
+$ uv run pytest -q
+# 試験。外部のコマンドは呼ばない
+:::
+
+```yaml title=".github/workflows/ci.yml（設計の D-05）"
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run ruff check
+      - run: uv run pytest -q
+```
+
+:::warning CIを入れる理由
+統括がPRをマージするには、`coding-task` のマージの規則が求める「CIの合格の観測（1つ以上の検査）」が要ります。CIのないrepositoryでは、エージェントがマージできません。CIはsecretsを使わず、外部のサービスへ何も送りません。
+:::
+
+## 試験
+
+:::datatable 試験の一覧
+| ID | 確かめること | 要件 |
+|---|---|---|
+| T-01 | `--help` が7つの名前を出し、終了コード0 | R-01 |
+| T-02 | `repo`・`draft`・`schedule` の `--help` が、その下の名前を出す | R-01 |
+| T-03 | `python -m shipcast --help` も同じ | R-01 |
+| T-04 | 未実装の葉（全部）が作るIssueを示して2で終わり、何も作らない | F-01 |
+| T-05 | 知らない名前・引数・下位のコマンドなしで2 | F-02 |
+| T-06 | `AGENTS.md` に3つのcommandと `agy` を呼ばない旨 | R-03 |
+| T-07 | `ci.yml` に起動の条件・権限・3つのcommand | R-04 |
+| T-08 | PRでCIの検査が合格している（観測） | R-04 |
+| T-09 | 新しいcloneで3つのcommandが通る | R-02 |
+:::
+
+試験の書き方は、テストを先に書いて落ちることを確かめ（Red）、実装で通す（Green）順です。未実装の葉の試験は、`HOME` と `XDG_*` を一時のフォルダーに向けた上で呼び、呼んだ後にそのフォルダーの中身が増えていないことを確かめます。
+
+## 仕様からマージまで
+
+```plantuml id=gates
+@startuml
+title iss-00008 の関門（light）
+start
+:タスク担当が仕様を書く\n（要件・設計・計画・説明資料）;
+:仕様のレビュー\nspec-reviewer（Opus 5.5 / medium）;
+note right: P0・P1がなくなるまで、3回まで
+:統括がOrcaのworktreeを用意する\n（branch iss-00008）;
+:実装担当 Codex（GPT-6.2 Sol / medium）\nS-01 → S-02 → S-03;
+:タスク担当が S-04（AGENTS.md）を書く;
+:最終品質ゲート\nquality-gate-reviewer＋全テスト;
+note right: 区切りのレビューはなし（light）
+:PRを作り、CIの合格を観測する;
+:統括に、PR・合格のコミット・CIの結果を報告する;
+:統括（Antigravity）がマージする;
+stop
+@enduml
+```
+
+:::raci
+| 作業 | 統括（Antigravity） | タスク担当（Opus 5.5） | 実装担当（Codex GPT-6.2 Sol） | spec-reviewer・quality-gate-reviewer |
+|---|---|---|---|---|
+| 仕様と説明資料 | I | A | I | C |
+| S-01 packageと土台 | I | C | A | I |
+| S-02 CLIの入口と表 | I | C | A | I |
+| S-03 CIのworkflow | I | C | A | I |
+| S-04 `AGENTS.md`（指示の文書） | I | A | I | I |
+| 最終品質ゲートとPR | I | A | C | C |
+| マージ | A | C | I | I |
+:::
+
+:::note S-04 をタスク担当が書く理由
+`AGENTS.md` は、エージェントが読む指示の文書です。モデルと推論の方針は、この種の文書を書く手順を、実装担当に頼まずタスク担当が自分で書くと定めています。そのため S-01〜S-03 は実装担当、S-04 だけはタスク担当が書きます。
+:::
+
+## 守ること
+
+:::danger 外部のモデルと秘密情報
+- このIssueには、外部のモデルの呼び出しがありません。`agy`・`codex`・`claude` を試験から呼びません
+- repositoryはpublicです。試験やCIに、秘密情報や個人の設定を書きません
+- PRの本文に `Closes #8` などの自動で閉じる書き方を使いません（閉じるのはSpecDockの `work finish`）
+:::
+
+:::checklist このIssueの完了の確かめ
+- `uv run shipcast --help` が7つの下位のコマンドを示す
+- `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が通る
+- `AGENTS.md` の「Gitと検証」に3つのcommandがある
+- PRでCIが合格している
+- 統括に報告し、統括がマージした
+:::
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

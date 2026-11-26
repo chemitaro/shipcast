@@ -10,6 +10,8 @@ ID: "iss-00008"
 
 詳細: [Report Guide](../../../docs/authoring/report.md)
 
+## レビュー記録
+
 ## Outcome
 
 ## Verification
