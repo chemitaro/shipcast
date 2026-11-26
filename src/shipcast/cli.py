@@ -7,6 +7,7 @@ from functools import partial
 from shipcast import __version__
 
 from shipcast import repo  # isort: skip
+from shipcast.collect import command as collect_command  # isort: skip
 
 
 @dataclass(frozen=True)
@@ -32,7 +33,7 @@ COMMANDS = (
             Entry("list", "登録済みのリポジトリを表示する", repo.configure_list),
         ),
     ),
-    Command(Entry("collect", "日誌の素材を集める"), "iss-00011"),
+    Command(Entry("collect", "日誌の素材を集める", collect_command.configure), "iss-00011"),
     Command(Entry("write", "集めた素材から日誌を書く"), "iss-00016"),
     Command(Entry("run", "素材の収集から日誌の作成までを実行する"), "iss-00021"),
     Command(Entry("serve", "日誌を閲覧するためのサーバーを起動する"), "iss-00017"),

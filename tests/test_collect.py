@@ -3,7 +3,8 @@ from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
-from shipcast.collect import COLLECTORS
+from shipcast.cli import main
+from shipcast.collect import COLLECTORS, command
 from shipcast.collect.base import CollectError, CollectResult, collect_repo, day_bounds
 from shipcast.config import RepoConfig
 from shipcast.model import SOURCES, Event, event_id
@@ -111,3 +112,124 @@ def test_collector_names_are_unique_and_known():
     names = [collector.name for collector in COLLECTORS]
     assert len(set(names)) == len(names)
     assert set(names) <= set(SOURCES)
+
+
+def test_collect_cli_invalid_date_is_usage_error(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("SHIPCAST_CONFIG", str(tmp_path / "missing.toml"))
+    with pytest.raises(SystemExit) as error:
+        main(["collect", "--date", "not-a-date"])
+    assert error.value.code == 2
+    message = capsys.readouterr().err
+    assert "usage: shipcast collect" in message
+    assert "not-a-date" in message
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.fixture
+def collect_config(tmp_path, monkeypatch):
+    config = tmp_path / "config.toml"
+    state = tmp_path / "state"
+    monkeypatch.setenv("SHIPCAST_CONFIG", str(config))
+
+    def write(*repo_ids):
+        text = f'timezone = "Asia/Tokyo"\nstate_dir = "{state}"\n'
+        for repo_id in repo_ids:
+            text += f'\n[[repos]]\nid = "{repo_id}"\npath = "{tmp_path / repo_id}"\n'
+        config.write_text(text, encoding="utf-8")
+
+    return write, config, state
+
+
+def test_collect_cli_defaults_to_all_repos_and_local_today(collect_config, monkeypatch, capsys):
+    write, _, state = collect_config
+    write("zeta", "alpha")
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls.fromisoformat("2026-11-25T15:00:00+00:00").astimezone(tz)
+
+    class WarningCollector:
+        name = "git"
+
+        def collect(self, repo, day, tz):
+            assert day == DAY
+            assert tz.key == "Asia/Tokyo"
+            return CollectResult(
+                (make_event(repo_id=repo.id),),
+                ("架空の注意",),
+            )
+
+    monkeypatch.setattr(command, "datetime", FixedDatetime)
+    monkeypatch.setattr(command, "COLLECTORS", (WarningCollector(),))
+    assert main(["collect"]) == 0
+
+    out, err = capsys.readouterr()
+    assert out.splitlines() == [
+        "zeta 2026-11-26: 1件を集め、1件を新しく保存しました",
+        "alpha 2026-11-26: 1件を集め、1件を新しく保存しました",
+    ]
+    assert err.splitlines() == [
+        "shipcast collect: 警告: zeta: git: 架空の注意",
+        "shipcast collect: 警告: alpha: git: 架空の注意",
+    ]
+    with Store(state) as store:
+        for repo_id in ("zeta", "alpha"):
+            assert store.events_for(repo_id, DAY, tz=TZ) == [make_event(repo_id=repo_id)]
+
+
+@pytest.mark.parametrize(
+    "case, args, expected",
+    [
+        ("missing", [], "設定ファイルがありません"),
+        ("unreadable", [], "設定ファイルを開けません"),
+        (
+            "empty",
+            [],
+            "登録されたrepositoryはありません。`shipcast repo add <path>` で登録できます",
+        ),
+        (
+            "unknown",
+            ["--repo", "unknown"],
+            "登録されていないrepositoryです: unknown\n"
+            "直し方: `shipcast repo list` で登録済みのidを確かめてください",
+        ),
+        ("invalid-db", [], "状態の置き場を開けません: "),
+        ("invalid-dir", [], "状態の置き場を開けません: "),
+    ],
+)
+def test_collect_cli_preflight_failures_leave_state_intact(
+    case, args, expected, collect_config, capsys
+):
+    write, config, state = collect_config
+    original = b"invalid data"
+    if case == "empty":
+        write()
+    elif case == "unreadable":
+        config.mkdir()
+    elif case != "missing":
+        write("demo")
+    if case == "invalid-db":
+        state.mkdir()
+        (state / "state.sqlite3").write_bytes(original)
+    elif case == "invalid-dir":
+        state.write_bytes(original)
+
+    assert main(["collect", *args]) == 1
+
+    out, err = capsys.readouterr()
+    assert out == ""
+    assert err.startswith("shipcast collect: ")
+    assert expected in err
+    if case in {"invalid-db", "invalid-dir"}:
+        assert (
+            "直し方: 設定の `state_dir` が、書き込めるディレクトリを指しているか確かめてください"
+            in err
+        )
+    if case == "invalid-db":
+        assert list(state.iterdir()) == [state / "state.sqlite3"]
+        assert (state / "state.sqlite3").read_bytes() == original
+    elif case == "invalid-dir":
+        assert state.read_bytes() == original
+    else:
+        assert not state.exists()
