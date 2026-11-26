@@ -27,15 +27,31 @@ compatibility: "新しいモジュール2つを足すだけで、既存の公開
 
 design: {
 	"D-01": {
-		title: "`shipcast.redact`：伏せる規則の表"
+		title: "`shipcast.redact`：伏せる規則の表と、JSONの構造をたどる伏せ方"
 		text: #"""
-			`redact(text: str) -> str`。`str` でなければ `TypeError`。表 `RULES` の規則を上から順に、文字列全体へ `pattern.sub(replacement, text)` で当て、当たった部分を `[伏せた]`（定数 `REDACTED`）に置き換える。規則を足すときは、表に1行足す。例外は握りつぶさない（F-03）。
+			`redact(text: str) -> str`。`str` でなければ `TypeError`。2つの層で伏せる。
+
+			1. **JSONの層**：文字列の前後の空白を除いた全体が `{` か `[` で始まり、`json.loads` でJSONの物か配列として読めるときは、構造をたどる。物の鍵が秘密の名前（`SECRET_KEY` に全体が当たる）で、値が `None` と空の文字列でなければ、値を型によらず（数、物、配列も）文字列 `"[伏せた]"` に置き換える。ほかの文字列の値は、同じ `redact` の手順で伏せる（文字列の中のJSONも、ここで再びたどる）。数・真偽値・`null`・鍵の名前は変えない。たどった後は `json.dumps(…, ensure_ascii=False)` で1行に書き直す（元の字下げと `\u` のエスケープは保たないが、JSONとして読める）。
+			2. **文の層**：JSONとして読めない文字列には、表 `RULES` の規則を上から順に、文字列全体へ当てる。
+
+			JSONの層があるので、`json.dumps` で書き出された日本語（`\u30f3` など）、引用符（`\"`）、改行（`\n`）が規則の手掛かりを隠すことがない。規則を足すときは `RULES` に1行足す。例外は握りつぶさない（F-03）。次のコードは、タスク担当が Python 3.12 で、下の例を実際に通して確かめたもの（2026-11-26）で、実装はこの振る舞いに合わせる。
 
 			```python
+			import json, re
 			REDACTED = "[伏せた]"
-			_A = r"(?<![A-Za-z0-9_])"   # 前が ASCII の英数字・_ でない（\b を使わない。日本語の隣でも当たる）
+			_A = r"(?:(?<![A-Za-z0-9_])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))"
 			_Z = r"(?![A-Za-z0-9_])"
 			_KEY = r"(?:PASSWORD|PASSWD|SECRET|TOKEN|API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|CREDENTIALS?)"
+			SECRET_KEY = re.compile(r"(?i)[A-Za-z0-9_.-]*" + _KEY + r"[A-Za-z0-9_.-]*")
+
+			def _rd04_repl(m):
+			    v = m.group(2)
+			    if v.startswith('\\"') and len(v) >= 4 and v.endswith('\\"'):
+			        return m.group(1) + '\\"' + REDACTED + '\\"'
+			    if v[0] in "\"'" and len(v) >= 2 and v[-1] == v[0]:
+			        return m.group(1) + v[0] + REDACTED + v[0]
+			    return m.group(1) + REDACTED
+
 			RULES = (
 			    ("RD-01", re.compile(r"-----BEGIN ((?:[A-Z0-9]+ )*)PRIVATE KEY-----.*?(?:-----END \1PRIVATE KEY-----|\Z)", re.S), REDACTED),
 			    ("RD-02", re.compile(r"([A-Za-z][A-Za-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@"), r"\1" + REDACTED + "@"),
@@ -43,17 +59,52 @@ design: {
 			    ("RD-04", re.compile(
 			        r"(?i)" + _A
 			        + r"((?:\\?[\"'])?[A-Za-z0-9_.-]*" + _KEY + r"[A-Za-z0-9_.-]*(?:\\?[\"'])?[ \t]*+[:=][ \t]*+)"
-			        + r"(?!\[伏せた\])"
-			        + r"(?:\\\"(?:(?!\\\")[^\n])*\\\"|\"(?:[^\"\\\n]|\\.)*\"|'[^'\n]*'|(?:(?!,[ \t]*\\?\"|[}\]])[^\n])+)"
-			    ), r"\1" + REDACTED),
+			        + r"(?!(?:\\?[\"'])?\[伏せた\])"
+			        + r"(\\\"(?:(?!\\\")[^\n])*\\\"|\"(?:[^\"\\\n]|\\.)*\"|'[^'\n]*'|(?:(?!\\[nr])[^\n])+)"
+			    ), _rd04_repl),
 			    ("RD-05", re.compile(_A + r"gh[pousr]_[A-Za-z0-9]{20,}"), REDACTED),
 			    ("RD-06", re.compile(_A + r"github_pat_[A-Za-z0-9_]{20,}"), REDACTED),
-			    ("RD-07", re.compile(r"(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{16,}"), REDACTED),
+			    ("RD-07", re.compile(r"(?:(?<![A-Za-z0-9_-])|(?<=\\u[0-9A-Fa-f]{4})|(?<=\\[nrtbf]))sk-[A-Za-z0-9_-]{16,}"), REDACTED),
 			    ("RD-08", re.compile(_A + r"(?:AKIA|ASIA)[0-9A-Z]{16}" + _Z), REDACTED),
 			    ("RD-09", re.compile(_A + r"xox[abposr]-[A-Za-z0-9-]{10,}"), REDACTED),
 			    ("RD-10", re.compile(_A + r"AIza[0-9A-Za-z_-]{35}(?![0-9A-Za-z_-])"), REDACTED),
 			    ("RD-11", re.compile(_A + r"eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), REDACTED),
 			)
+
+			def redact_text(text):
+			    for _, p, r in RULES:
+			        text = p.sub(r, text)
+			    return text
+
+			def _container(s):
+			    t = s.strip()
+			    if not t or t[0] not in "[{":
+			        return None
+			    try:
+			        v = json.loads(t)
+			    except ValueError:
+			        return None
+			    return v if isinstance(v, (dict, list)) else None
+
+			def _walk(v):
+			    if isinstance(v, dict):
+			        return {k: (REDACTED if SECRET_KEY.fullmatch(k) and v2 not in (None, "") else _walk(v2)) for k, v2 in v.items()}
+			    if isinstance(v, list):
+			        return [_walk(x) for x in v]
+			    if isinstance(v, str):
+			        return _redact_str(v)
+			    return v
+
+			def _redact_str(s):
+			    c = _container(s)
+			    if c is not None:
+			        return json.dumps(_walk(c), ensure_ascii=False)
+			    return redact_text(s)
+
+			def redact(text):
+			    if not isinstance(text, str):
+			        raise TypeError("redact() は str だけを受け取ります")
+			    return _redact_str(text)
 			```
 
 			| 番号 | 対象 | 要点 |
@@ -61,13 +112,13 @@ design: {
 			| RD-01 | PEMの秘密鍵の塊 | BEGIN と同じ種類（`RSA `・`OPENSSH `・`EC `・`ENCRYPTED `・なし）の END の行までを伏せる。同じ種類の END がなければ末尾まで（種類の違う END では止まらない） |
 			| RD-02 | URLの中の利用者:パスワード | `https://user:pass@host` の `user:pass` だけ |
 			| RD-03 | `Bearer` の後の値 | 大小を問わない |
-			| RD-04 | 秘密の名前の鍵の値 | 鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` などを含み（大小を問わない）、`=` か `:` が続く。鍵の前後の引用符は、なし・`"`・`'`・JSONの中の `\"` のどれでもよい。値は、`\"…\"`（JSONの文字列の中のJSON）、`"…"`、`'…'` ならその引用の全体、引用がなければ、行の末尾・`}`・`]`・次の鍵（`, "` か `, \"`）の前まで。値が空（`TOKEN=` で行が終わる、空白だけ）なら変えない。値が `[伏せた]` で始まれば変えない（冪等） |
-			| RD-05〜RD-11 | 形で分かるトークン | 前後を ASCII の英数字・`_` で区切る（日本語の隣でも当たる） |
+			| RD-04 | 秘密の名前の鍵の値（文の層） | 鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` などを含み（大小を問わない）、`=` か `:` が続く。鍵の前後の引用符は、なし・`"`・`'`・`\"` のどれでもよい。値が `\"…\"`・`"…"`・`'…'` なら、引用の中だけを `[伏せた]` にして引用符を残す。引用がなければ、行の末尾（または文字の `\n`・`\r` の手前）まで伏せる（`}`・`]`・`,` では止まらない）。値が空・空白だけなら変えない。値が `[伏せた]` で始まれば変えない（冪等） |
+			| RD-05〜RD-11 | 形で分かるトークン | 前を ASCII の英数字・`_` で区切る。`\uXXXX`・`\n` などのエスケープの直後も区切りとみなす（日本語の隣でも当たる） |
 
-			- 順は、複数行の RD-01、文脈で当てる RD-02〜RD-04、形で当てる RD-05〜RD-11。`[伏せた]` はどの規則にも当たらないので、もう一度通しても変わらない（冪等）。
-			- RD-04 は `PASSWORD=`・`TOKEN=`・`SECRET=` の行（epic-00004 の F-02）を広げたもの。`max_tokens: 1000` のような秘密でない値も伏せる（伏せすぎは受け入れ、閉じる側に倒す）。1行のJSONでは、その鍵の値だけを伏せ、ほかの鍵と値は残す。
-			- 引用のない値の中の `,` の後に `"` が続く形（`PASSWORD=a, "b`）は、`,` の前までしか伏せない（JSONの次の鍵と見分けられない）。規則に当てはまらない形の秘密は伏せられない（risks）。
-			- 試験で確かめた例（2026-11-26、タスク担当が Python 3.12 で確かめた）：`json.dumps({"events": [{"text": "log: " + json.dumps({"password": "DUMMY_EXAMPLE", "user": "demo"})}, ...]})` の `DUMMY_EXAMPLE` だけが伏せられ、`"user"` とほかの出来事は残る。「トークン」の直後の `ghp_` のトークン、「キー」の直後の `AKIA` のIDも伏せられる。
+			- `[伏せた]` はどの規則にも当たらず、JSONの層も同じ結果を返すので、もう一度通しても変わらない（冪等）。
+			- RD-04 は `PASSWORD=`・`TOKEN=`・`SECRET=` の行（epic-00004 の F-02）を広げたもの。`max_tokens` のような秘密でない値も伏せる（伏せすぎは受け入れ、閉じる側に倒す）。文の層の引用のない値は行の末尾まで伏せる（同じ行の後ろの文も消えるが、秘密を残さない側に倒す）。1行のJSONの全体は、JSONの層が鍵ごとに伏せるので、ほかの鍵と値は残る。
+			- 確かめた例（タスク担当、Python 3.12、2026-11-26。すべて漏れなし・冪等）：`json.dumps` した「トークン」の直後の `ghp_` のトークン・`AKIA` のID・`sk-` の鍵。会話の本文に入れた `json.dumps({"password": "DUMMY\"EXAMPLE", "user": "demo"})` を、さらに外側のJSONに入れたもの（`password` の値だけが伏せられ、`user` とほかの出来事が残り、結果がJSONとして読める）。`DB_PASSWORD=DUMMY]EXAMPLE`・`DB_PASSWORD=Ab}9xQ2`（値の全体）。`{"password": "…", "title": "keep"}`（`"password": "[伏せた]"`、`title` が残り、JSONとして読める）。JSONの文字列の中の `PASSWORD=…\nnormal line`（`normal line` が残る）。`payload: {"api_token": "…", "title": "keep"}` のような文の中のJSON（値だけ）。閉じのない `"password": "abc`。JSONとして読めない、エスケープの残った文 `{\"password\": \"…\"`。
+			- 限界：JSONとして読めない文の中で、エスケープの残った引用（`\"…\"`）の値の中にさらに `\"` がある形は、最初の `\"` までしか伏せない。規則に当てはまらない形の秘密は伏せられない（risks）。
 			"""#
 		satisfies: ["R-02", "F-03"]
 	}
@@ -77,6 +128,7 @@ design: {
 		- `AGENT_MARKERS = ("CLAUDECODE", "AI_AGENT", "ORCA_AGENT_SESSION_ID")`、`AGENT_MARKER_PREFIXES = ("CODEX_",)`。
 		- `agent_markers(env: Mapping[str, str]) -> tuple[str, ...]`：env の鍵のうち、`AGENT_MARKERS` のどれかと同じか、`AGENT_MARKER_PREFIXES` のどれかで始まる名前を、名前の順に並べて返す。値は見ない（空の文字列でも印）。env が `Mapping` でない、または鍵を読む途中で例外が起きたら `(UNREADABLE_ENV,)`（`UNREADABLE_ENV = "<環境を読めない>"`）を返す（閉じる側に倒す）。
 		- `in_agent_context(env) -> bool`：`agent_markers(env)` が空でなければ真。
+		- `agent_markers` は鍵だけを読む。値を読むと例外を上げる Mapping でも、鍵を読めれば印の一覧を返す（その環境は `complete` の写しの段で止まる。D-04）。
 		- `GuardedRoute.complete` は、呼ぶたびに（`get_route` のときではなく）環境の写しを作り、その写しで調べる（D-04）。日誌の書き手を作っただけで出来事のない日（モデルを呼ばない）は止めない。同じ `GuardedRoute` でも、呼ぶ間に印が現れれば、次の呼び出しで止まる。
 		"""
 		satisfies: ["F-01"]
@@ -95,7 +147,7 @@ design: {
 
 		- 引数の確かめ（2026-11-26）：`codex`（codex-cli 0.172.0）と `claude` は `--help` で確かめた。`codex` の4つの `--disable` は、モデルを呼ばない `codex debug prompt-input` で、手元を読む道具（`exec_command`・`write_stdin`・`view_image`・プラグインの導入）がモデルに見える道具の一覧から消えることを確かめた（requirement.cue の decisions）。`agy`（1.5.12）は起動せず、公式の文書で確かめた（`-p` は print、応答は標準出力、`json` の形は `{conversation_id, status, response, error?, duration_seconds, num_turns, usage}`、`status` は `SUCCESS`・`ERROR` など、モデルの名前に深さが入る `gemini-4-neon-high` など、`--mode` は `accept-edits`・`auto`・`plan`、許可を取れない道具は拒まれて続く、`--sandbox` はコマンドを隔離しネットワークを止める）。文書は、ふつうの標準入力からプロンプトを読む方法を示さないので、プロンプトは `-p` の引数で渡す（F-04）。
 		- `codex` は thinking を使わず、`claude` と `codex` は model と effort だけを使う。`antigravity` は effort を使わない。
-		- 道具（F-05）：`claude` は `--tools ""` で道具なし。`codex` は手元を読む道具を外し、利用者の設定（MCP・フック）を読まず、read-only の sandbox、空の cwd。`antigravity` は `plan` のモード、`--sandbox`、空の cwd で狭めるだけで、残る危険は受け入れて記録する（requirement.cue の decisions の Q-01）。
+		- 道具（F-05）：`claude` は `--tools ""` で道具なし。`codex` は手元を読む道具を外し、利用者の設定（MCP・フック）を読まず、read-only の sandbox、空の cwd。`antigravity` は `plan` のモード、`--sandbox`、空の cwd で狭めるだけで、残る危険は本人が受け入れた（requirement.cue の decisions の Q-01）。
 		- 子の環境は、`complete` が作った環境の写し（D-04）。認証のため `HOME` などが要るので、絞らない。
 		"""
 		satisfies: ["R-01", "F-04", "F-05"]
@@ -120,7 +172,7 @@ design: {
 		```
 
 		- `get_route`：`model_cfg.route` が `ROUTES` になければ `UnknownRoute`（文に4つの名前）。`timeout` が正の有限の数でなければ `ValueError`。`responder` を `fake` 以外に渡したら `ValueError`。`runner` を省くと `run_subprocess`（D-06）。子のプロセスは作らず、環境も読まない。
-		- `complete` の順（target の図）：(1) prompt・system が `str` でなければ `TypeError`。(2) 環境の写し `snapshot = dict(source)` を作る（`source` は `get_route` に渡した env、省いたら呼ぶときの `os.environ`）。例外が起きたら、antigravity は `RouteRefused(markers=(UNREADABLE_ENV,))`、ほかの経路は `RouteFailed`（理由「環境を読めない」）。(3) 経路が `antigravity` なら `agent_markers(snapshot)` が空でなければ `RouteRefused`。(4) `redact(prompt)`、`redact(system)` の順に呼ぶ。例外は包まずにそのまま上げる。(5) `want_json` が真なら、system の末尾に（空でなければ改行2つを挟んで）`JSON_INSTRUCTION` を足す。(6) antigravity なら、D-03 の `text` の UTF-8 の長さが `MAX_ARGV_PROMPT_BYTES` を超えたら `RouteFailed`（ちょうどなら通す。F-04）。(7) 経路の実装を呼ぶ。runner には `snapshot` と `timeout` を渡す。(8) 応答の本文が空か空白だけなら `RouteFailed`。応答はそのまま返す（前後の空白も変えない）。
+		- `complete` の順（target の図）：(1) prompt・system が `str` でなければ `TypeError`。(2) 環境の写しを作る（`source` は `get_route` に渡した env、省いたら呼ぶときの `os.environ`）。`source` が `collections.abc.Mapping` でなければ、また `snapshot = {k: source[k] for k in source}` の途中で例外が起きたら、antigravity は `RouteRefused(markers=(UNREADABLE_ENV,))`、ほかの経路は `RouteFailed`（理由「環境を読めない」）。(3) 経路が `antigravity` なら `agent_markers(snapshot)` が空でなければ `RouteRefused`。(4) `redact(prompt)`、`redact(system)` の順に呼ぶ。例外は包まずにそのまま上げる。(5) `want_json` が真なら、system の末尾に（空でなければ改行2つを挟んで）`JSON_INSTRUCTION` を足す。(6) antigravity なら、D-03 の `text` の UTF-8 の長さが `MAX_ARGV_PROMPT_BYTES` を超えたら `RouteFailed`（ちょうどなら通す。F-04）。(7) 経路の実装を呼ぶ。runner には `snapshot` と `timeout` を渡す。(8) 応答の本文が空か空白だけなら `RouteFailed`。応答はそのまま返す（前後の空白も変えない）。
 		- (1)〜(6) は、子のプロセスと `responder` の前に必ず通る。経路の実装は `GuardedRoute` を通さずに作れない（非公開のクラス、`get_route` だけが作る）。
 		- 応答は伏せない（excludes）。
 		"""
@@ -178,8 +230,8 @@ design: {
 
 risks: [
 	"エージェントの印の環境変数は、各道具の版で変わりうる。Antigravity の CLI が自分の道具の中で付ける印は文書になく、Orca の外で Antigravity の作業者が shipcast を動かすと止められない。2026-12-19 の Antigravity の規約の読み直しのときに、印も見直す（requirement.cue の questions）",
-	"伏せる規則に当てはまらない形の秘密（独自の形のトークン、鍵の名前のない値、引用のない値の中の `, \"` の後ろ）は伏せられない。規則は `RULES` の表に1行足して増やす",
-	"`agy -p` の道具は、引数では止めきれない（F-05。requirement.cue の decisions の Q-01 で受け入れた。本人がマージの前に確かめる）。`codex` の道具の外し方は、codex-cli の版で機能の名前が変わりうる。版を上げたら `codex debug prompt-input` で確かめ直す",
+	"伏せる規則に当てはまらない形の秘密（独自の形のトークン、鍵の名前のない値、D-01 の限界の形）は伏せられない。規則は `RULES` の表に1行足して増やす。JSONは、呼ぶ側が prompt の全体を1つのJSONにして渡すと、構造をたどって確実に伏せられる（requirement.cue の constraints）",
+	"`agy -p` の道具は、引数では止めきれない（F-05。本人が残る危険を受け入れた。requirement.cue の decisions の Q-01）。`codex` の道具の外し方は、codex-cli の版で機能の名前が変わりうる。版を上げたら `codex debug prompt-input` で確かめ直す",
 	"`agy` の引数は文書だけで確かめ、起動していない。最初の本物の実行（本人の手動）で、引数の誤りが `RouteFailed` として見つかりうる。その場合は D-03 の表を直す",
 	"antigravity の経路は、プロンプトを命令の行の引数で渡すので、同じPCのほかの利用者から `ps` で見える（伏せた後の文字列）。個人のPCの前提で受け入れる",
 ]
