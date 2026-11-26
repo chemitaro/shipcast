@@ -11,7 +11,7 @@ design: {
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>…</title>
 		<link rel="stylesheet" href="/_ds/ds.css">
-		<script type="text/markdown" id="ds-source">（日誌のMarkdown。`</script` は `<\\/script` に置き換える）</script>
+		<script type="text/markdown" id="ds-source">（日誌のMarkdown。`</script` は `<\\/script` に、`<!--` は `<\\!--` に置き換える。D-05）</script>
 		<script src="/_ds/ds.js"></script></head><body></body></html>
 		```
 		`/_ds/` は、設定の `serve.design_system_dir`（空なら登録したrepositoryの `spec-dock/design-system/`）のファイルを返す。デザインシステムをこのrepositoryに写さない。
@@ -27,6 +27,15 @@ design: {
 		title:     "配信の部品"
 		text:      "標準の `http.server.ThreadingHTTPServer`。道筋は `/`、`/<repo>/`、`/<repo>/<YYYY-MM-DD>`、`/_ds/<file>`。pathは日誌の置き場の中に解決できるものだけを返す。"
 		satisfies: ["R-01", "R-02", "F-02"]
+	}
+	"D-05": {
+		title: "応答のヘッダーとエスケープ（防御の1か所）"
+		text: """
+		- `security_headers()`：すべての応答（404を含む）に、CSP（`default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'`）と `X-Content-Type-Options: nosniff`。描けないときは要る最小の許可だけを足し、scriptに `'unsafe-inline'` を許さない。
+		- `wrap_markdown`：`</script`（大文字小文字を問わない）と `<!--` を置き換える1か所。
+		- `resolve_inside(root, rel)`：日誌とデザインシステムの両方のpathの検査の1か所。
+		"""
+		satisfies: ["F-02", "F-03", "F-04"]
 	}
 	"D-04": {
 		title:     "Tailscaleでの公開"

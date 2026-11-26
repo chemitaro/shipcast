@@ -4,7 +4,7 @@ schema: "specdock/v1"
 
 assurance: {
 	level:  "standard"
-	reason: "定期の実行を登録する。登録を外せば元に戻る"
+	reason: "本人のmacOSに定期の実行を登録し、毎晩の処理の入口を作る。誤ると日誌が欠けるが、手元の処理だけで、登録を外せば元に戻る"
 }
 
 purpose: "毎晩3時に、登録した全repositoryの前日の日誌を自動で作る。"
