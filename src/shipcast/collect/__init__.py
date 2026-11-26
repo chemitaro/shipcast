@@ -2,5 +2,6 @@
 
 from shipcast.collect.base import Collector
 from shipcast.collect.git import GitCollector
+from shipcast.collect.specdock import SpecDockCollector
 
-COLLECTORS: tuple[Collector, ...] = (GitCollector(),)
+COLLECTORS: tuple[Collector, ...] = (GitCollector(), SpecDockCollector())
