@@ -39,7 +39,20 @@ ID: "iss-00018"
 - コードの基準：`bf9af47d11df2c3e80cda7f71b908af3ca24c676`（clean）
 - 結果のファイル：`.workbench/spec-review/iss-00018/round-2.json`（検査 `round-2.check.json`：valid、pass）
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（attempt 01。P0 0件、P1 0件、P2 0件、P3 2件、coverage complete）
+- 合格のコミット：`bf9af47d11df2c3e80cda7f71b908af3ca24c676`（開始 `b7832b8` から）。記録のコミットなし
+- レビュアー：`quality-gate-reviewer`（Opus 5.5 / medium）。観点：functional-correctness、requirements-closure、test-adequacy、security-baseline
+- 試験：`uv sync --locked`・`uv run ruff check`・`uv run pytest -q`（659 passed）・`uv run shipcast serve --help` がすべて終了コード0
+- `closure.md`：`.workbench/final-quality-gate/iss-00018-fqg/closure.md`
+
 ## Outcome
+
+- `/` に表紙（repositoryごとの最新の日誌の `:::cards`、repositoryごとの一覧へのリンク）、`/<repo>/` に一覧（月ごとの `:::timeline`、日付・題名・lead、新しい順）、`/<repo>` は `/<repo>/` へ301。
+- 前付けの値は `shipcast.page.markdown_text` で記号を文字参照にしてから入れ、部品の属性・見出し・リンク・HTMLにならない。
+- 置き場を歩くときは、repository・年・ファイルの各段で `resolve_inside` を通す。
+- `split_path` は末尾の `/` を最後の空の部分として返す（iss-00017 の申し送りを解消）。
 
 ## Verification
 
@@ -59,3 +72,10 @@ ID: "iss-00018"
 - CSPの違反：Orca の CLI にコンソールの読み取りがないため直接は見ていない。敵対的な値から要素が作られないことで、違反の元がないことを確かめた
 
 ## Residual Risks / Follow-ups
+
+- 日を1つも持たない repository のディレクトリも、表紙の「repositoryごとの一覧」にリンクが出て、押すと404（仕様レビューの P3）。
+- 題名に U+2028/U+2029 があると、表紙のカードが前のカードに混ざる（最終品質ゲートの P3、形の崩れのみ）。日誌の書き手は前付けの値を1行の普通の文字にする。
+- T-06 は Orca の CLI にコンソールの読み取りがないため、CSP の違反をコンソールで直接は見ていない（最終品質ゲートの P3）。
+- 表紙と一覧は要求のたびに置き場を歩く。日誌が何年分にもなると遅くなりうる。
+- ds.js の部品の書き方が変わると、表紙と一覧の形が崩れうる。デザインシステムの更新のときに T-06 をやり直す。
+- 既存の試験の `/missing`（301になる）を `/missing/` に直した（仕様レビューの P2。互換性の記述の範囲の外）。

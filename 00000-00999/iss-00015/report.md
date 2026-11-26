@@ -23,6 +23,15 @@ ID: "iss-00015"
 - 経緯：1回目は合格（P2 1件：対のないサロゲートを含む文字列が形の検査を通り、保存で型の決まらない例外になる。P3 2件：R-03 の等しさが同じ日の再実行で成り立たない、手順6の割り当て）。安価に直せるので受け入れて直し（V-09、R-03 の受入条件の限定と risks、S-02・S-03 の分担の明記）、2回目で全体を見直してもらった
 - 結果のファイル：shipcastの `.workbench/spec-review/iss-00015/`（`round-1.json`・`round-2.json` と `.check.json`、`review-response.md`）
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（キャンペーン `iss-00015-fqg-1` の attempt 01）
+- 合格のコミット：`1a8d4e87da67c8cdad137ca7064f15e8254dc939`（範囲 `b7832b8..1a8d4e8`、clean）
+- 主：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。pass、P0 0・P1 0・P2 0・P3 0、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（671 passed）がすべて exit 0（タスク担当の試験レーン）
+- 2人目：none（standard）
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00015-fqg-1/closure.md`
+
 ## Outcome
 
 - S-01（応答の検査と日本語プロンプト）を実装。コミットは `0be8de4090357b5e7d2e4bd602fc99e1a619c446`。
@@ -58,4 +67,6 @@ ID: "iss-00015"
 ## Residual Risks / Follow-ups
 
 - 同じ日の再分析で話題の分け方が変わると旧話題が残る。後続は設計の申し送りどおり `analyze` の戻り値を使う。
-- 最終品質ゲートと PR・CI の確認はタスク担当に引き継ぐ。
+- 最終品質ゲートは合格（上の記録）。
+- PR：https://github.com/chemitaro/shipcast/pull/31（branch `chemitaro/iss-00015`、head `1a8d4e8`、`Refs #15`）。CI：GitHub Actions の workflow `ci` / job `test` が `1a8d4e87da67c8cdad137ca7064f15e8254dc939` で success（`github-pr-checks` の observer exit 0、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY、2026-11-26T13:46:01Z）。マージと `spec-dock work finish` は統括が行う。
+- 出来事の本文が長いと分析の入力が大きくなる（切り詰めない。design.cue の risks）。
