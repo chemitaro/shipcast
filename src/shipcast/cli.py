@@ -6,6 +6,8 @@ from functools import partial
 
 from shipcast import __version__
 
+from shipcast import repo  # isort: skip
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -25,7 +27,10 @@ COMMANDS = (
     Command(
         Entry("repo", "日誌の対象リポジトリを管理する"),
         "iss-00009",
-        (Entry("add", "リポジトリを登録する"), Entry("list", "登録済みのリポジトリを表示する")),
+        (
+            Entry("add", "リポジトリを登録する", repo.configure_add),
+            Entry("list", "登録済みのリポジトリを表示する"),
+        ),
     ),
     Command(Entry("collect", "日誌の素材を集める"), "iss-00011"),
     Command(Entry("write", "集めた素材から日誌を書く"), "iss-00016"),

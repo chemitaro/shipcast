@@ -2,6 +2,8 @@
 
 import os
 import re
+import shutil
+import tempfile
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -293,3 +295,159 @@ def parse_config(text: str, source: Path) -> Config:
         NetaConfig(threshold),
         reader.repos(values.get("repos", [])),
     )
+
+
+@dataclass(frozen=True)
+class AddResult:
+    repo: RepoConfig
+    config_path: Path
+    created: bool
+
+
+def derive_repo_id(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+_TOML_ESCAPES = {codepoint: f"\\u{codepoint:04X}" for codepoint in (*range(0x20), 0x7F)}
+_TOML_ESCAPES.update(
+    str.maketrans(
+        {
+            '"': r"\"",
+            "\\": r"\\",
+            "\b": r"\b",
+            "\t": r"\t",
+            "\n": r"\n",
+            "\f": r"\f",
+            "\r": r"\r",
+        }
+    )
+)
+
+
+def toml_string(value: str) -> str:
+    return '"' + value.translate(_TOML_ESCAPES) + '"'
+
+
+def _replace_config(destination: Path, text: str, original: str | None) -> None:
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", newline="", dir=destination.parent, delete=False
+        ) as file:
+            temporary = Path(file.name)
+            file.write(text)
+            file.flush()
+            os.fsync(file.fileno())
+        if original is not None:
+            shutil.copymode(destination, temporary)
+        os.replace(temporary, destination)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def _write_config(destination: Path, text: str, original: str | None) -> bool:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if os.name != "posix":
+        _replace_config(destination, text, original)
+        return True
+
+    import fcntl
+
+    # The directory survives an atomic replacement, so concurrent writers lock the same inode.
+    directory_fd = os.open(destination.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(directory_fd, fcntl.LOCK_EX)
+        try:
+            current = _read_text(destination)
+        except FileNotFoundError:
+            current = None
+        if current != original:
+            return False
+        _replace_config(destination, text, original)
+        return True
+    finally:
+        os.close(directory_fd)
+
+
+def add_repo(
+    repo_path: str | Path,
+    *,
+    repo_id: str | None = None,
+    title: str | None = None,
+    ref: str = "main",
+    config_file: str | Path | None = None,
+) -> AddResult:
+    target = Path(repo_path).expanduser().resolve()
+    if not target.is_dir():
+        raise ConfigError(
+            "repositoryのディレクトリがありません", "存在するディレクトリを指定してください", target
+        )
+    if not (target / "spec-dock" / "workspace.json").is_file():
+        raise ConfigError(
+            "SpecDockを使っていません", "SpecDockを入れたrepositoryを指定してください", target
+        )
+
+    repo_id = derive_repo_id(target.name) if repo_id is None else repo_id
+    if not _REPO_ID.fullmatch(repo_id):
+        raise ConfigError(
+            "有効な id が必要です", "`--id` で英小文字・数字・`-` の名前を指定してください", target
+        )
+    title = target.name if title is None else title
+    reader = _ConfigReader(target)
+    reader.string(title, "--title")
+    reader.string(ref, "--ref")
+    repo = RepoConfig(repo_id, target, ref, title, True)
+
+    source = config_path() if config_file is None else Path(config_file).expanduser()
+    while True:
+        destination = source.resolve()
+        if destination.is_relative_to(target):
+            raise ConfigError(
+                "設定ファイルが対象のrepositoryの中にあります",
+                "`SHIPCAST_CONFIG` でrepositoryの外の道筋を指定してください",
+                source,
+            )
+        try:
+            original = _read_text(source)
+        except FileNotFoundError:
+            original = None
+        base = DEFAULT_CONFIG_TEXT if original is None else original
+        combined = _append_repo(base, source, repo)
+        if _write_config(destination, combined, original):
+            return AddResult(repo, source, created=original is None)
+
+
+def _append_repo(base: str, source: Path, repo: RepoConfig) -> str:
+    config = parse_config(base, source)
+    for existing in config.repos:
+        if existing.id == repo.id or existing.path.resolve() == repo.path:
+            raise ConfigError(
+                f"すでに {existing.id} として登録されています",
+                "未登録のrepositoryと id を指定してください",
+                source,
+            )
+
+    separator = ""
+    if base:
+        separator = "\n" if base.endswith("\n") else "\n\n"
+    combined = (
+        f"{base}{separator}[[repos]]\n"
+        f"id = {toml_string(repo.id)}\n"
+        f"path = {toml_string(str(repo.path))}\n"
+        f"ref = {toml_string(repo.ref)}\n"
+        f"title = {toml_string(repo.title)}\n"
+        "orca = true\n"
+    )
+
+    problem = "設定ファイルの末尾にrepositoryを足せません"
+    hint = "`repos` を `[[repos]]` の形で書いてください"
+    try:
+        updated = parse_config(combined, source)
+    except ConfigError as error:
+        raise ConfigError(problem, hint, source) from error
+    if updated.repos != (*config.repos, repo):
+        raise ConfigError(problem, hint, source)
+
+    return combined
