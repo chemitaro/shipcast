@@ -28,6 +28,19 @@ ID: "iss-00014"
   - SR-P2（spec-reviewer）：決定14の例外（Q-01 の本人の採用）が、AGENTS.md の決めた置き場 `content/decisions/` にない。この Issue の変えるファイルの外なので、統括に申し送る（本人の採用の記録を `content/decisions/` に足すかは統括と本人が決める）
   - CG-P2（ChatGPT）：RD-04 は、区切りの後の空白として ASCII のスペースとタブだけを読むので、`TOKEN=\r\n` の `\r` や全角の空白だけの値も `[伏せた]` にする（伏せすぎで、漏れはない）。申し送り：D-01 のコードのとおりに実装し、T-02 の「空白だけの値は変わらない」は ASCII のスペースとタブの場合として確かめる（解釈。`## 逸脱と判断` に記録する）
 
+### 仕様のレビュー（最終品質ゲートの1回目の後の仕様の変更。2026-11-26）
+
+- 結果：**合格**（系列3の1回目。両レビュアーとも P0 0件、P1 0件）。この合格が、上の合格に代わる今の合格
+- 固定した文書（sha256）：
+  - `requirement.cue`：`b74e5168e888048e956f648ced2e01c5fcee53a2c120958ca7e55fdcced17104`
+  - `design.cue`：`8f7e9254b8c35de43a59d9e3101124f1bc74a25a61411cd12f7b9b4534d1b853`
+  - `plan.cue`：`935125495a14e39a7cb46dc7c35fc1db7d2bbece9b8ad8253cf862f23a3e51ba`（実装中は各 step の `status` だけを書き換える）
+- 変更の理由：最終品質ゲートの1回目（`7cdb371`）で、ChatGPT の2人目が P1（引用の中のエスケープで値の残りが漏れる）と P2（規則の時間が長い入力で2乗に増える）を出し、どちらも再現した。coding-task の手順7で仕様を直した（D-01 のコード、R-02 の受入、F-06、T-02、T-11、S-05）
+- 経緯：系列2の2回目・3回目で、ChatGPT が時間の2乗の別の形を1件ずつ P1 で出した（RD-04 の `token` の繰り返し、`SECRET_KEY`）。spec-reviewer も P2 で `b'password=…'` の退行と RD-11 の `eyJ-` を出した。系列2が3回の上限に達し、統括が系列3を承認した（2026-11-26、msg_690f11deafbd）。継ぎ足しをやめ、全規則を総当たりで測った（29の書き出し×14の区切り×4の形。128,000 文字で最悪0.23秒）
+- 1人目：Claude `spec-reviewer`（Opus 5.5 / high、同じレビュアー）。pass（P3 1件。D-01 に総当たりの記述がないとの指摘は、131行の注記にあるので読み違いとみる。止めない）
+- 2人目：ChatGPT GPT-6 / Extra High（同じ会話の続き）。カタログのcommit `01baa5ae1231f5bb3e569c22dca48a6f32368084` に固定。pass（P0〜P3 0件。独立に53例と、T-11 の100件の時間を測った）。送信の確認が時間切れになったが、同じ会話を `--harvest --no-recover` で読み直して回答を取り戻した（新しい送信はしていない）
+- 結果のファイル：shipcastの `.workbench/spec-review/iss-00014/`（`s2-round-2.json`・`s2-round-3.json`・`s3-round-1.json` と `.check.json`、`chatgpt-s2-round-2.raw.md`・`chatgpt-s2-round-3.raw.md`・`chatgpt-s3-round-1.raw.md`、`review-response.md`、時間の総当たりの `perf_fuzz2.py`）
+
 ### 区切りのレビュー CP-1（2026-11-26）
 
 - 結果：**合格**（1回目。P0 0件、P1 0件、P2 0件、P3 0件。`validate-review.py` exit 0、status pass）
