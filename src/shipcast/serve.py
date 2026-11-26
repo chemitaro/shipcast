@@ -35,16 +35,16 @@ def split_path(target: str) -> tuple[str, ...] | None:
     path = target.partition("?")[0].partition("#")[0]
     if not path.startswith("/"):
         return None
-    try:
-        path = unquote(path, errors="strict")
-    except UnicodeDecodeError:
-        return None
-    if "\x00" in path or "\\" in path:
-        return None
     if path == "/":
         return ()
-    parts = tuple(path[1:].split("/"))
-    if any(not part or part.startswith(".") for part in parts):
+    try:
+        parts = tuple(unquote(part, errors="strict") for part in path[1:].split("/"))
+    except UnicodeDecodeError:
+        return None
+    if any(
+        not part or part.startswith(".") or "/" in part or "\\" in part or "\x00" in part
+        for part in parts
+    ):
         return None
     return parts
 
@@ -97,7 +97,7 @@ def host_allowed(host: str | None) -> bool:
     if named is None:
         return False
     name = named[1]
-    if "." not in name or name.endswith(".ts.net"):
+    if name == "localhost" or name.endswith(".ts.net"):
         return True
     try:
         ipaddress.IPv4Address(name)

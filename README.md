@@ -63,7 +63,7 @@ tailscale serve --bg 8765
 - 443番をほかの用途で使っているときは、`tailscale serve --bg --https=8443 8765` のように別のポートで公開し、`https://<端末の名前>.<tailnetの名前>.ts.net:8443/` で開きます（止めるのは `tailscale serve --https=8443 off`）。ページは `/_ds/` を読むので、`--set-path` で道筋の下に置く方法は使えません。
 - **Tailscale Funnel（`tailscale funnel`）は使いません。** Funnel はインターネットの誰にでも公開します。日誌は本人だけが読むものです。
 - `--host 0.0.0.0` などで直接ネットワークに待ち受けると、同じLANの端末からも読めます。その場合は警告を出します。`tailscale serve` で `127.0.0.1` の配信を中継する方法を勧めます。
-- 手元の名前（`127.0.0.1`・`localhost`）、IPアドレス、`.ts.net` の名前、点のない短い名前以外のHostで来た要求は400で拒みます（ほかのWebページからの DNS rebinding を防ぐため）。
+- Host が `127.0.0.1`、`localhost`、ほかのIPアドレス、または `.ts.net` の名前であれば受け付けます。それ以外は、ほかのWebページからの DNS rebinding を防ぐため400で拒みます。
 
 ## License
 
