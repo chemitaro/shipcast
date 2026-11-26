@@ -51,6 +51,11 @@ ID: "iss-00019"
 - 試験：`uv sync --locked` 0、`uv run ruff check` 0、`uv run pytest -q` 0（800 passed）
 - 説明資料：ヘッドレスの Chrome で描画し、PlantUML の図が `data-status="success"` で描けることを確かめた
 
+### PR と CI
+
+- PR https://github.com/chemitaro/shipcast/pull/34（`chemitaro/iss-00019` → `main`、head `0402c2f8a695407f7f32ca00d62db2d2ba69278b`、`Refs #19`）
+- CI：`watch-pr-checks` exit 0、OBSERVED_CI_PASS、Actions の `ci` run 45842399135 success（head `0402c2f`）、merge_readiness READY（2026-11-26T14:47:50Z）。マージは統括
+
 ## Residual Risks / Follow-ups
 
 - 同じ日を分析し直して話題の分け方が変わると、id が変わり別の話題として点数が足される（requirement.cue の excludes）

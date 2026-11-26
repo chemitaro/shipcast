@@ -11,7 +11,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "doing"
+		status:   "done"
 		title:    "lock（`run_lock`）と TCC の見分け（`with_tcc_hint`）"
 		text:     "D-02・D-04。T-05・T-06・T-07 を先に書いて Red、`LOCK_FILENAME`・`run_lock`・`TCC_MARKER`・`with_tcc_hint`・`probe_readable` を書き、`run` の手順4と D-03 の手順0と誤りの文につないで Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["F-01", "F-02"]
@@ -19,7 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
-		status:   "todo"
+		status:   "doing"
 		title:    "再実行の確かめ"
 		text:     "D-05。T-08 を書く。既存の部品の性質で満たすので、Red にならないことがある。そのときは、試験が満たすべき性質を本当に見ていることを、一時的に `Store.add_events` を `INSERT` だけにする等の手元の変更で落ちることを確かめて戻し、報告に書く（その変更はcommitしない）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-03"]
