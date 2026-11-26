@@ -197,6 +197,7 @@ def test_unconsumed_stories_uses_ledger_points_and_insertion_order(tmp_path):
         assert store.unconsumed_stories("demo-app") == [first, tie, updated]
         assert store.unconsumed_stories("demo-app", limit=1) == [first]
         assert store.unconsumed_stories("demo-app", limit=0) == [first, tie, updated]
+        assert store.unconsumed_stories("demo-app", limit=10**20) == [first, tie, updated]
         assert store.unconsumed_stories("demo-lib") == [other]
 
 

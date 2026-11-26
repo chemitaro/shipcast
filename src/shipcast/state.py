@@ -255,14 +255,18 @@ class Store:
         return [story_id for (story_id,) in rows]
 
     def unconsumed_stories(self, repo_id: str, *, limit: int | None = None) -> list[Story]:
-        query = """
+        # SQLite binds signed 64-bit integers and treats a negative LIMIT as unlimited.
+        row_limit = min(limit, 2**63 - 1) if type(limit) is int and limit >= 1 else -1
+        rows = self._conn.execute(
+            """
             SELECT stories.json FROM neta_ledger
             JOIN stories ON stories.id = neta_ledger.story_id
             WHERE neta_ledger.repo_id = ? AND consumed = 0 AND points > 0
             ORDER BY points DESC, neta_ledger.rowid
-            """
-        row_limit = limit if type(limit) is int and limit >= 1 else -1
-        rows = self._conn.execute(query + "LIMIT ?", (repo_id, row_limit))
+            LIMIT ?
+            """,
+            (repo_id, row_limit),
+        )
         return [Story.from_json(text) for (text,) in rows]
 
     def consume_neta(self, story_ids: Iterable[str]) -> int:
