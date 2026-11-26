@@ -22,7 +22,7 @@ state_dir = "~/.local/state/shipcast"
 
 [models.analyst]
 route = "codex"          # codex | claude | fake
-model = "gpt-6.2-sol"
+model = "gpt-6.2-sol" # より安い: "gpt-6-luna"（codex debug models で確認。2026-11-26）
 effort = "low"
 
 [models.writer]
