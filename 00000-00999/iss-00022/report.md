@@ -25,10 +25,11 @@ ID: "iss-00022"
 
 ### 最終品質ゲート（2026-11-27）
 
-- 結果：**合格**（キャンペーン `iss-00022-fqg-1` の attempt 01）
-- 合格のコミット：`1d92763b226bc795866046a7d0347236704ca9b5`（範囲 `e101f40..1d92763`、clean）
+- 結果：**合格**（キャンペーン `iss-00022-fqg-1` の attempt 02）
+- 合格のコミット：`0c6a5aedf54941e55bfcf77bfe87bdd42b696c8c`（範囲 `e101f40..0c6a5ae`、clean）
+- 経緯：attempt 01 は `1d92763` で合格（P0〜P3 0、848 passed）。PR 作成後に main（PR #36、iss-00020）と `tests/test_cli.py` で衝突したため、タスク担当が `origin/main` を通常のマージで取り込み（`0c6a5ae`。両方の変更で未実装の葉がなくなったので、未実装の葉の試験を、印の仕組み `_configure_leaf` を見本の葉で直接確かめる形にした）、attempt 02 で全範囲を見直した
 - 主：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。pass、P0 0・P1 0・P2 0・P3 0、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline
-- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（848 passed）がすべて exit 0（タスク担当の試験レーン）
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（897 passed）がすべて exit 0（タスク担当の試験レーン）
 - 2人目：none（standard）
 - 記録：shipcastの `.workbench/final-quality-gate/iss-00022-fqg-1/closure.md`
 
