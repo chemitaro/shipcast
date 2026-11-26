@@ -27,4 +27,9 @@ shipcastは、ソフトウェアファクトリーの時代の開発者のため
 - 検証を通した成果は`main`へ統合し、`git push origin main`します。force pushと公開済みの履歴の書換えはしません。
 - 並行する実装はOrcaのworktreeとbranchで行い、PRで`main`に入れます。
 - commitは自分が変えたpathだけを明示してstageします。
-- 検証のcommandは、実装を始めるときにここへ書きます（まだコードはありません）。
+- 検証のcommand（この順に、手元とCIで同じものを流す）：
+  1. `uv sync --locked`
+  2. `uv run ruff check`
+  3. `uv run pytest -q`
+- 試験とエージェントの作業では、外部のモデルを呼ばない。モデルの経路は`fake`を使い、`agy`を呼ばない。
+- PRはCI（`.github/workflows/ci.yml`）の合格を観測してから、統括がマージする。
