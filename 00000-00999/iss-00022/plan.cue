@@ -4,7 +4,7 @@ goal: "新しい `schedule.py` に、ファイルにも `launchctl` にも触れ
 
 steps: {
 	"S-01": {
-		status:   "todo"
+		status:   "doing"
 		title:    "plist の組み立てと実行ファイルの見つけ方（`build_plist`・`nightly_environment`・`find_program`）"
 		text:     "D-01・D-02。T-01・T-02・T-03 を `tests/test_schedule.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/schedule.py` に定数・`ScheduleError`・`build_plist`・`nightly_environment`・`find_program` を書いて通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "F-01"]
