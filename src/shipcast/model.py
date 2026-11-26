@@ -6,6 +6,8 @@ import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
+from os import PathLike
+from pathlib import Path
 from typing import Self
 
 SCHEMA_VERSION = 1
@@ -282,3 +284,129 @@ def story_id(repo_id: str, day: date, event_ids: Iterable[str]) -> str:
 
 def _stable_id(*parts: str) -> str:
     return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
+
+
+def journal_path(journal_dir: str | PathLike[str], repo: str, day: date) -> Path:
+    _repo_id(repo, "journal_path.repo")
+    _day(day, "journal_path.day")
+    return Path(journal_dir) / repo / f"{day:%Y}" / f"{day.isoformat()}.md"
+
+
+JOURNAL_REQUIRED_FIELDS = ("title", "lead", "date", "repo")
+JOURNAL_FIELDS = (
+    *JOURNAL_REQUIRED_FIELDS,
+    "category",
+    "analyst",
+    "writer",
+    "generated_at",
+    "schema",
+)
+_JOURNAL_KEY = re.compile(r"[a-z_]+")
+
+
+class JournalFormatError(ValueError):
+    """The journal front matter is invalid."""
+
+
+@dataclass(frozen=True)
+class JournalMeta:
+    title: str
+    lead: str
+    date: date
+    repo: str
+    category: str | None = None
+    analyst: str | None = None
+    writer: str | None = None
+    generated_at: str | None = None
+    schema: int | None = None
+
+    def __post_init__(self) -> None:
+        for field in JOURNAL_FIELDS:
+            if field in ("date", "schema"):
+                continue
+            value = getattr(self, field)
+            if value is None and field not in JOURNAL_REQUIRED_FIELDS:
+                continue
+            if (
+                not isinstance(value, str)
+                or not value
+                or value != value.strip()
+                or "\n" in value
+                or "\r" in value
+            ):
+                raise JournalFormatError(
+                    f"JournalMeta.{field}: expected a nonempty single line without outer whitespace"
+                )
+        if not REPO_ID_PATTERN.fullmatch(self.repo):
+            raise JournalFormatError(
+                "JournalMeta.repo: expected lowercase letters, digits, or hyphens"
+            )
+        if not isinstance(self.date, date) or isinstance(self.date, datetime):
+            raise JournalFormatError("JournalMeta.date: expected a date")
+        if self.schema is not None and (type(self.schema) is not int or self.schema < 0):
+            raise JournalFormatError("JournalMeta.schema: expected a nonnegative integer")
+
+
+def write_frontmatter(meta: JournalMeta) -> str:
+    lines = ["---"]
+    for field in JOURNAL_FIELDS:
+        value = getattr(meta, field)
+        if value is not None:
+            lines.append(f"{field}: {meta.date.isoformat() if field == 'date' else value}")
+    return "\n".join([*lines, "---", ""])
+
+
+def parse_journal(text: str) -> tuple[JournalMeta, str]:
+    lines = text.removeprefix("\ufeff").split("\n")
+    if lines[0].rstrip() != "---":
+        raise JournalFormatError("JournalMeta.line 1: expected an opening ---")
+    closing = next(
+        (i for i, line in enumerate(lines[1:], 1) if line.removesuffix("\r") == "---"), None
+    )
+    if closing is None:
+        raise JournalFormatError("JournalMeta.frontmatter: missing closing ---")
+
+    values = {}
+    for number, line in enumerate(lines[1:closing], 2):
+        if not line.strip():
+            continue
+        key, separator, value = line.partition(":")
+        key = key.strip()
+        if not separator or not _JOURNAL_KEY.fullmatch(key):
+            raise JournalFormatError(f"JournalMeta.line {number}: expected key: value")
+        if key in values:
+            raise JournalFormatError(f"JournalMeta.{key}: duplicate key")
+        values[key] = value.strip()
+
+    missing = [field for field in JOURNAL_REQUIRED_FIELDS if not values.get(field)]
+    if missing:
+        raise JournalFormatError(f"前付けに必須の項目がありません: {', '.join(missing)}")
+    try:
+        day = date.fromisoformat(values["date"])
+    except ValueError as exc:
+        raise JournalFormatError("JournalMeta.date: invalid ISO 8601 date") from exc
+    schema = values.get("schema")
+    if schema and not schema.isdecimal():
+        raise JournalFormatError("JournalMeta.schema: expected decimal digits")
+    try:
+        version = int(schema) if schema else None
+    except ValueError as exc:
+        raise JournalFormatError("JournalMeta.schema: expected decimal digits") from exc
+
+    meta = JournalMeta(
+        title=values["title"],
+        lead=values["lead"],
+        date=day,
+        repo=values["repo"],
+        category=values.get("category") or None,
+        analyst=values.get("analyst") or None,
+        writer=values.get("writer") or None,
+        generated_at=values.get("generated_at") or None,
+        schema=version,
+    )
+    return meta, "\n".join(lines[closing + 1 :])
+
+
+def read_frontmatter(path: str | PathLike[str]) -> JournalMeta:
+    with Path(path).open(encoding="utf-8", newline="") as file:
+        return parse_journal(file.read())[0]
