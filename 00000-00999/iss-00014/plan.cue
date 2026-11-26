@@ -8,6 +8,7 @@ steps: {
 		text:     "D-01。T-02 を `tests/test_redact.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/redact.py` に `REDACTED`・`RULES`・`redact` を書いて通す（Green）。秘密らしい試験の値は、明らかに架空のダミー値を、文字列の連結で組み立てる（repositoryの文に、トークンの形の文字列をそのまま置かない）。完了の条件：T-02 が通り、`uv run ruff check` が通る。"
 		realizes: ["R-02", "F-03"]
 		session:  "impl"
+		status:   "doing"
 	}
 	"S-02": {
 		title:    "エージェントの中の検出（`agent_markers`・`in_agent_context`）"
