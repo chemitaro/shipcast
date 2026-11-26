@@ -1,9 +1,15 @@
 import json
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from importlib.resources import files
 
 import pytest
 
-from shipcast.model import Neta
+from shipcast.analyze import AnalyzeFailed, analyze, parse_stories
+from shipcast.config import ModelConfig
+from shipcast.model import Event, ModelError, Neta, Story, story_id
+from shipcast.models import JSON_INSTRUCTION, RouteFailed, get_route
+from shipcast.state import Store
 
 
 def story_response(**changes):
@@ -22,8 +28,6 @@ def response_text(*stories):
 
 
 def test_parse_stories_preserves_order_and_defaults():
-    from shipcast.analyze import parse_stories
-
     raw = response_text(
         story_response(
             notice=["表示順が変わる"],
@@ -104,8 +108,6 @@ MARKER = "fictional-response-marker"
     ],
 )
 def test_parse_stories_rejects_invalid_response(raw, location):
-    from shipcast.analyze import parse_stories
-
     stories, errors = parse_stories(raw, event_ids={"sample-a"})
 
     assert stories == []
@@ -114,8 +116,6 @@ def test_parse_stories_rejects_invalid_response(raw, location):
 
 
 def test_parse_stories_caps_errors():
-    from shipcast.analyze import parse_stories
-
     stories, errors = parse_stories(response_text(*([MARKER] * 30)), event_ids={"sample-a"})
 
     assert stories == []
@@ -136,3 +136,206 @@ def test_analyze_prompt_is_packaged_with_required_instructions():
         "stories",
     ):
         assert word in prompt
+
+
+REPO = "demo-app"
+DAY = date(2026, 11, 26)
+
+
+@pytest.fixture
+def events():
+    return [
+        Event(
+            id=identifier,
+            repo_id=REPO,
+            source="git",
+            kind=kind,
+            at=datetime(2026, 11, 26, 9 + index, tzinfo=UTC),
+            title=title,
+            body="架空の作業の概要",
+            refs=("#3",),
+            actor="demo-writer",
+        )
+        for index, (identifier, kind, title) in enumerate(
+            [
+                ("sample-a", "commit", "表示を追加"),
+                ("sample-b", "merge", "説明を更新"),
+                ("sample-c", "commit", "一覧の表示を調整"),
+            ]
+        )
+    ]
+
+
+@pytest.fixture
+def store(tmp_path):
+    with Store(tmp_path) as opened:
+        yield opened
+
+
+def fake_route(responder):
+    return get_route(ModelConfig("fake", "fake-analyst", None, None), env={}, responder=responder)
+
+
+def test_analyze_builds_stories_in_response_order(events, store):
+    def respond(prompt, system, want_json):
+        return (
+            " \n```json\n"
+            + response_text(
+                story_response(
+                    notice=["表示順が変わる"],
+                    waiting=["見た目の確認"],
+                    neta={"score": 2, "reason": "変化が見える", "channels": ["x"], "extra": 1},
+                    event_ids=["sample-c", "sample-a"],
+                    extra="無視する値",
+                ),
+                story_response(title="補足", event_ids=["sample-b"]),
+            )
+            + "\n``` \n"
+        )
+
+    assert analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY) == [
+        Story(
+            id=story_id(REPO, DAY, ("sample-c", "sample-a")),
+            repo_id=REPO,
+            date=DAY,
+            title="表示の改善",
+            what="一覧を追加した",
+            why="進捗を見つけやすくするため",
+            neta=Neta(2, "変化が見える", ("x",)),
+            notice=("表示順が変わる",),
+            waiting=("見た目の確認",),
+            event_ids=("sample-c", "sample-a"),
+        ),
+        Story(
+            id=story_id(REPO, DAY, ("sample-b",)),
+            repo_id=REPO,
+            date=DAY,
+            title="補足",
+            what="一覧を追加した",
+            why="進捗を見つけやすくするため",
+            neta=Neta(0),
+            event_ids=("sample-b",),
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first_error", "location"),
+    [
+        (None, None),
+        (MARKER, "応答"),
+        (response_text(story_response(neta={"score": True})), "stories[0].neta.score"),
+    ],
+)
+def test_analyze_retries_only_invalid_response(events, store, first_error, location):
+    calls = []
+    good = response_text(story_response())
+    responses = iter([good] if first_error is None else [first_error, good])
+
+    def respond(prompt, system, want_json):
+        calls.append((prompt, system, want_json))
+        return next(responses)
+
+    assert len(analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY)) == 1
+    assert len(calls) == (1 if first_error is None else 2)
+    expected_system = (files("shipcast") / "prompts" / "analyze.md").read_text(encoding="utf-8")
+    for prompt, system, want_json in calls:
+        assert system == f"{expected_system}\n\n{JSON_INSTRUCTION}"
+        assert want_json is True
+        assert MARKER not in prompt
+
+    initial = json.loads(calls[0][0])
+    assert initial == {
+        "repo": REPO,
+        "date": "2026-11-26",
+        "events": [
+            {
+                "id": event.id,
+                "source": "git",
+                "kind": event.kind,
+                "at": f"2026-11-26T{9 + index:02d}:00:00+00:00",
+                "title": event.title,
+                "body": "架空の作業の概要",
+                "refs": ["#3"],
+                "actor": "demo-writer",
+            }
+            for index, event in enumerate(events)
+        ],
+    }
+    if first_error is not None:
+        retry = json.loads(calls[1][0])
+        errors = retry.pop("previous_errors")
+        assert len(errors) == 1
+        assert errors[0].startswith(f"{location}:")
+        assert retry == initial
+
+
+def test_analyze_reports_only_last_shape_errors(events, store):
+    calls = []
+    responses = iter([MARKER, response_text(story_response(what={MARKER: 1}))])
+
+    def respond(prompt, system, want_json):
+        calls.append(prompt)
+        return next(responses)
+
+    with pytest.raises(AnalyzeFailed) as caught:
+        analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY)
+
+    assert len(calls) == caught.value.attempts == 2
+    assert len(caught.value.errors) == 1
+    assert caught.value.errors[0].startswith("stories[0].what:")
+    assert str(caught.value).startswith("分析の応答が2回とも決まった形になりませんでした")
+    assert MARKER not in str(caught.value)
+
+
+def test_analyze_propagates_route_failure_without_retry(events, store):
+    calls = []
+    failure = RouteFailed("fake", reason="架空の経路が失敗")
+
+    def respond(prompt, system, want_json):
+        calls.append(prompt)
+        raise failure
+
+    with pytest.raises(RouteFailed) as caught:
+        analyze(events, fake_route(respond), store=store, repo_id=REPO, day=DAY)
+
+    assert caught.value is failure
+    assert len(calls) == 1
+
+
+def reject_call(*args):
+    pytest.fail("モデルを呼び出してはいけない")
+
+
+def test_analyze_returns_empty_without_calling_route(store):
+    assert analyze([], fake_route(reject_call), store=store, repo_id=REPO, day=DAY) == []
+    assert store.stories_for(REPO, DAY) == []
+    assert store.events_for(REPO, DAY, tz=UTC) == []
+
+
+@pytest.mark.parametrize("invalid_event", ["repo", "type"])
+def test_analyze_rejects_invalid_event_without_side_effects(events, store, invalid_event):
+    foreign = replace(events[-1], repo_id="other-app")
+    mixed = [*events, foreign if invalid_event == "repo" else {}]
+    with pytest.raises(ValueError):
+        analyze(mixed, fake_route(reject_call), store=store, repo_id=REPO, day=DAY)
+
+    assert store.stories_for(REPO, DAY) == []
+    assert store.events_for(REPO, DAY, tz=UTC) == []
+    assert store.events_for("other-app", DAY, tz=UTC) == []
+
+
+@pytest.mark.parametrize(
+    ("repo_id", "day"), [("INVALID", DAY), (REPO, datetime(2026, 11, 26, tzinfo=UTC))]
+)
+def test_analyze_validates_repo_and_day_even_without_events(store, repo_id, day):
+    with pytest.raises(ModelError):
+        analyze([], fake_route(reject_call), store=store, repo_id=repo_id, day=day)
+
+
+def test_parse_stories_strips_unicode_whitespace_before_json():
+    stories, errors = parse_stories(
+        "\u3000" + response_text(story_response()) + "\u3000", event_ids={"sample-a"}
+    )
+    assert errors == []
+    assert len(stories) == 1

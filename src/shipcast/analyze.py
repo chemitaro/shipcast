@@ -1,14 +1,83 @@
 """出来事を分析して話題を作る。"""
 
 import json
-from collections.abc import Collection, Iterator
+from collections.abc import Collection, Iterator, Sequence
+from datetime import date
 from importlib.resources import files
+from typing import Protocol
 
-from shipcast.model import Neta
+from shipcast.model import Event, Neta, Story, story_id
+from shipcast.state import Store
 
+MAX_ATTEMPTS = 2
 PROMPT_PATH = "prompts/analyze.md"
 _MAX_ERRORS = 20
 _REQUIRED_TEXT = ("title", "what", "why")
+
+
+class _Completer(Protocol):
+    def complete(self, prompt: str, *, system: str = "", want_json: bool = False) -> str: ...
+
+
+class AnalyzeFailed(Exception):
+    """応答が続けて話題の形式に合わなかった。"""
+
+    def __init__(self, attempts: int, errors: Sequence[str]) -> None:
+        self.attempts = attempts
+        self.errors = tuple(errors)
+        detail = "、".join(self.errors[:5])
+        super().__init__(f"分析の応答が{attempts}回とも決まった形になりませんでした：{detail}")
+
+
+def analyze(
+    events: Sequence[Event],
+    route: _Completer,
+    *,
+    store: Store,
+    repo_id: str,
+    day: date,
+) -> list[Story]:
+    """その日の出来事を分析し、応答順の話題を返す。"""
+    # 空の入力でも repo_id と day を story_id と同じ規則で検査する。
+    story_id(repo_id, day, ("",))
+    for event in events:
+        if not isinstance(event, Event) or event.repo_id != repo_id:
+            raise ValueError("events: 指定したリポジトリのEventだけを渡してください")
+    if not events:
+        return []
+
+    system = _read_prompt()
+    payload = {
+        "repo": repo_id,
+        "date": day.isoformat(),
+        "events": [
+            {
+                key: value
+                for key, value in event.to_dict().items()
+                if key not in ("schema", "repo_id")
+            }
+            for event in events
+        ],
+    }
+    event_ids = {event.id for event in events}
+    errors: list[str] = []
+    for _ in range(MAX_ATTEMPTS):
+        if errors:
+            payload["previous_errors"] = errors
+        prompt = json.dumps(payload, ensure_ascii=False)
+        response = route.complete(prompt, system=system, want_json=True)
+        values, errors = parse_stories(response, event_ids=event_ids)
+        if not errors:
+            return [
+                Story(
+                    id=story_id(repo_id, day, story["event_ids"]),
+                    repo_id=repo_id,
+                    date=day,
+                    **story,
+                )
+                for story in values
+            ]
+    raise AnalyzeFailed(MAX_ATTEMPTS, errors)
 
 
 def _read_prompt() -> str:
@@ -22,7 +91,8 @@ def _reject_json_constant(value: str) -> None:
 
 def parse_stories(text: str, *, event_ids: Collection[str]) -> tuple[list[dict], list[str]]:
     """応答を検査し、Story に渡せる値または日本語の修正箇所を返す。"""
-    lines = text.strip().split("\n")
+    text = text.strip()
+    lines = text.split("\n")
     if len(lines) >= 2 and lines[0].removesuffix("\r") in ("```", "```json") and lines[-1] == "```":
         text = "\n".join(lines[1:-1])
     try:
