@@ -51,7 +51,8 @@ ID: "iss-00017"
   - `design.cue`：`5ffc5108c48e35313851faed10b1220fa7f86fcd6613c0ad075504f31e42cc97`
   - `plan.cue`：`ff3f7a43bc688b22015d86a4fda0aee0eedb4f35440227ef131e96c06a5b38f4`
 - Claude `spec-reviewer`（同じレビュアー）：**合格**（P0 0、P1 0、P2 4、P3 3）。`round-3.json`、`round-3.check.json`（exit 0）。新しい P3：保たれない変換の一覧に、大文字の `</SCRIPT` が小文字になることが入っていない（D-01 の別の行に書いてある）
-- ChatGPT（同じ会話の続き、canonical `288c17e`）：結果は下に追記する
+- ChatGPT（同じ会話の続き、session `required-strict-github-connector-verificati-1567`、canonical `288c17e`）：pass（P0 0、P1 0、P2 2）。round 2 の P1 3件を「閉じてよい」と判断。P2 は round 2 と同じ2件（CSP の版の試験が実行時のデザインシステムを見ない、起動の検査が `vendor/marked.umd.js` の欠けを見ない）。注：この続きの回は選択画面を飛ばしたため、モデルの選択の証拠が `verified=no`（思考は Extra High が verified）。同じ会話の round 2 では GPT-6 が verified。どちらの判断でも P0/P1 はない
+- 判定：**round 3 で合格**（Claude pass、ChatGPT の P0/P1 なし）。`.workbench/spec-review/iss-00017/round-3.chatgpt.txt`
 
 ### 区切りのレビュー CP-1（2026-11-26）
 
