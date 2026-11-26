@@ -62,7 +62,7 @@ requirements: {
 	}
 	"R-03": {
 		title: "読むだけの機械向けの出力だけを使う"
-		text:  "`spec-dock scope list --json`、`spec-dock todo list --status all --json`、`gh issue list --state all --json number,title,state,createdAt,closedAt,url`。カタログの内部のファイルは解釈しない。"
+		text:  "`spec-dock scope list --offline --json`、`spec-dock todo list --status all --offline --json`、`gh issue list --state all --json number,title,state,createdAt,closedAt,url`。カタログの内部のファイルは解釈しない。`spec-dock` には `--offline` を付け、SpecDockの手元の観測（キャッシュ）を新しくしない（道具の状態も変えない約束。`shipcast.collect.base` の `Collector`）。"
 		acceptance: [
 			"呼ぶ外部のコマンドは、D-02 の3つの形だけ（ほかの `spec-dock`・`gh` のsubcommandを呼ばない）",
 			"SpecDockを使っていないrepository（`<path>/spec-dock/workspace.json` がない）では、何も呼ばず、Eventも警告もない",

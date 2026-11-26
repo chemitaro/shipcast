@@ -37,11 +37,11 @@ design: {
 
 		| # | argv | 使う項目 |
 		|---|---|---|
-		| 1 | `[spec_dock, "scope", "list", "--json", "--project", <path>]` | 外側 `status`、`error.code`・`error.message`。`data.result.items[]` の `id`、`kind`、`title`、`parent_id`、`backend`、`github_ref`（`gh:<owner>/<name>#<number>`）、`number`、`url`、`state_reason` |
-		| 2 | `[spec_dock, "todo", "list", "--status", "all", "--json", "--project", <path>]` | 外側は1と同じ。`data.result.repositories[]` の `repository`・`status`・`problem`。`data.result.items[].todo` の `id`、`title`、`kind`、`status`（`open`、`snoozed`、`done`、`cancelled`）、`created_at`、`due`、`origin.by`、`scopes.related`、`resolution`（`null` か `at`・`by`・`choice`・`record` を持つ物） |
+		| 1 | `[spec_dock, "scope", "list", "--offline", "--json", "--project", <path>]` | 外側 `status`、`error.code`・`error.message`。`data.result.items[]` の `id`、`kind`、`title`、`parent_id`、`backend`、`github_ref`（`gh:<owner>/<name>#<number>`）、`number`、`url`、`state_reason` |
+		| 2 | `[spec_dock, "todo", "list", "--status", "all", "--offline", "--json", "--project", <path>]` | 外側は1と同じ。`data.result.repositories[]` の `repository`・`status`・`problem`。`data.result.items[].todo` の `id`、`title`、`kind`、`status`（`open`、`snoozed`、`done`、`cancelled`）、`created_at`、`due`、`origin.by`、`scopes.related`、`resolution`（`null` か `at`・`by`・`choice`・`record` を持つ物） |
 		| 3 | `[gh, "issue", "list", "--repo", "<owner>/<name>", "--state", "all", "--limit", str(issue_limit), "--json", "number,title,state,createdAt,closedAt,url"]` | 配列の各要素の `number`、`state`（`OPEN`、`CLOSED`）、`createdAt`、`closedAt`（`null` か時刻）、`url` |
 
-		`spec-dock` の出力は、成功でも失敗でも標準出力に1つのJSONの封筒（`schema_version` `specdock.cli/v2`）を出す。時刻は `2026-11-26T11:36:14Z` の形で、`datetime.fromisoformat` で読む（Python 3.12 は `Z` を読める）。`todo` の `subtasks` と `history` は読まない。カタログの中のファイル（`todos/*.json` など）は開かない。
+		`spec-dock` の出力は、成功でも失敗でも標準出力に1つのJSONの封筒（`schema_version` `specdock.cli/v2`）を出す。時刻は `2026-11-26T11:36:14Z` の形で、`datetime.fromisoformat` で読む（Python 3.12 は `Z` を読める）。`--offline` は、`spec-dock` がGitHubに問い合わせず、手元の保存した観測を読むようにする（SpecDockの手元のキャッシュを新しくしない。道具の状態を変えないため。使う項目のID・題名・親・番号はカタログにあり、時刻は3の `gh` で取るので、観測が古くても困らない）。`todo` の `subtasks` と `history` は読まない。カタログの中のファイル（`todos/*.json` など）は開かない。
 		"""
 		satisfies: ["R-03"]
 	}
@@ -70,7 +70,7 @@ design: {
 		| `todo_open` | todoの `title` | `(id, *scopes.related)` | `todo: {id}（{kind}）`、`今の状態: {status}`、`期限: {due}`、`関連するScope: {related を "、" でつなぐ}`、`登録した側: {origin.by}` |
 		| `todo_done` | 同じ | 同じ | `todo: {id}（{kind}）`、`完了した側: {resolution.by}`、`選んだ選択肢: {resolution.choice}`、`記録: {resolution.record}`、`関連するScope: …` |
 
-		Scopeの `url` が空なら、Issueの `url` を使う。返すEventの順は、Scope（`<owner>/<name>` の順、その中は `scope list` の順、各Scopeで opened・closed の順）、次にtodo（`todo list` の順、各todoで open・done の順）。保存の順は `Store` が決めるので、試験はIDの集合と各項目で確かめる。
+		Scopeの `url` が空なら、Issueの `url` を使う。`title` が空の文字列なら、`（題名のないScope）`・`（題名のないtodo）` にする（`Event` は空の `title` を許さず、`ModelError` は `collect_repo` が受け止めないため）。返すEventの順は、Scope（`<owner>/<name>` の順、その中は `scope list` の順、各Scopeで opened・closed の順）、次にtodo（`todo list` の順、各todoで open・done の順）。保存の順は `Store` が決めるので、試験はIDの集合と各項目で確かめる。
 		"""
 		satisfies: ["R-01", "R-02"]
 	}
@@ -81,8 +81,10 @@ design: {
 
 		- `FileNotFoundError` → `spec-dockのコマンドが見つかりません: {self.spec_dock}`
 		- `subprocess.TimeoutExpired` → `spec-dock {sub} が{timeout}秒で終わりませんでした: {path}`
-		- 標準出力がJSONの物として読めない → `spec-dock {sub} の出力をJSONとして読めません: {path}`
-		- 終了コードが0でない、または封筒の `status` が `succeeded` でない → `spec-dock {sub} が失敗しました: {path}: {error.code}: {error.message の最初の空でない行}`（`error` が物でなければ、標準エラーの最後の空でない行）
+		- 終了コードが0でない → `spec-dock {sub} が失敗しました: {path}: {理由}`。`{理由}` は、標準出力がJSONの物で `error` が物なら `{error.code}: {error.message の最初の空でない行}`、そうでなければ標準エラーの最後の空でない行（空なら `終了コード {n}`）
+		- 終了コードが0で、標準出力がJSONの物として読めない → `spec-dock {sub} の出力をJSONとして読めません: {path}`
+		- 終了コードが0で、封筒の `status` が `succeeded` でない → 終了コードが0でないときと同じ文
+		（検査はこの順に行う）
 		- `data.result.items` が配列でない、または使う項目の型が違う（`id`・`title`・`kind`・`status`・`created_at` が文字列でない、時刻が読めない、`todo` が物でない、など） → `spec-dock {sub} の出力の形が想定と違います: {path}: {項目の名前}`
 
 		`gh`（D-02 の3）は警告にし、その `<owner>/<name>` のScopeの出来事を出さない（F-01）。文は `gh issue list を読めませんでした（{owner/name}）: {理由}。Scopeの作成と終了は集めていません`。`{理由}` は次のどれか：
@@ -110,6 +112,6 @@ design: {
 risks: [
 	"`spec-dock` と `gh` のJSONの形は版で変わりうる。使う項目を見本に固定し、変われば `出力の形が想定と違います` の誤りか警告で気づく",
 	"`gh issue list --limit 500` を超えるIssueのrepositoryでは、古いScopeの時刻が取れない。警告を出す（epic-00003 の risks）",
-	"`spec-dock scope list` は、既定で GitHub の観測を新しくすることがある（SpecDockの手元のキャッシュの更新）。対象のrepositoryのGitの状態は変えないので、読むだけの約束の範囲とする",
+	"`--offline` で読むので、SpecDockの手元の観測が古いと、Scopeの `state_reason`（本文の `閉じた理由`）が古いことがある。Scopeの作成と終了の判定は `gh` の時刻で行うので、Eventの有無は変わらない",
 	"一度閉じて再び開いたIssueは、`gh` の `state` が `OPEN` になるので、その日に閉じていても `scope_closed` を出さない",
 ]

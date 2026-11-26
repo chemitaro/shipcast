@@ -10,26 +10,206 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: iss-00012 SpecDockの出来事を集める
-lead: SpecDockのCLIの機械向けの出力から、その日のScopeの作成・終了と、本人待ちのtodoを集めます。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+lead: SpecDockを使うrepositoryで、その日に作られた・閉じたScopeと、その日に登録された・完了したtodoを、日誌の素材（Event）として集めます。読むのは `spec-dock` と `gh` の機械向けのJSONだけで、何も書き換えません。
+category: 説明資料（Issue・light）
+audience: このIssueのタスク担当・実装担当、後のcollector（iss-00013 Orca）の担当、統括
+status: 仕様を確定（仕様のレビュー待ち）
+updated: 2026-11-26
+docid: iss-00012
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-SpecDockのCLIの機械向けの出力から、その日のScopeの作成・終了と、本人待ちのtodoを集めます。親のE2の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 最初に実際の出力を確かめ、見本として置く
-- カタログの内部の形は解釈しない
+:::summary
+- このIssueが、日誌の素材の3つの出所のうち、どこを受け持つか
+- 「その日の変化」を、Scopeとtodoでどう決めるか（時刻をどこから取るか）
+- 読む3つのコマンドと、そこから作る4種類のEvent
+- `gh` や `spec-dock` が使えないとき、どう止まるか
+- 実際のdataを使わず、架空の見本で試験する方法
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`light`** です。Scopeの作成日・終了日は、`spec-dock scope list` の出力に時刻がないため、`gh issue list --state all --json number,title,state,createdAt,closedAt,url`（読むだけ）で取ります。todoは `spec-dock todo list --status all --json` で読みます。iss-00011 の共通の約束の後に始めます。
+## 背景：2つ目の出所、SpecDock
+
+shipcastは、登録したrepositoryで1日に起きたことを集め、日誌にします。素材の出所は Git・SpecDock・Orca の3つで、出所ごとに「collector」が1つあります。
+
+:::cards cols=3
+### Git {icon=branch badge=iss-00011}
+正本のbranchに入ったcommitとmerge。`main` に入り済みです。
+
+### SpecDock {icon=list badge=iss-00012}
+Scope（Initiative・Epic・Issue）の作成と終了、本人待ちのtodoの登録と完了。**このIssue**です。
+
+### Orca（任意） {badge=iss-00013}
+その日のエージェントとの会話。次のIssueです。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+collectorの共通の約束は、iss-00011 が `shipcast.collect.base` に作りました。このIssueは、その約束に従う `SpecDockCollector` を1つ書き、登録の `COLLECTORS` に1行足すだけです。`shipcast collect` の表示や保存の仕組みは変えません。
+
+:::note iss-00011 からの申し送り
+- `Collector.collect` の引数は `(repo, day, tz)` です（親の E2 の設計では `(repo, day)` でしたが、日の区切りに timezone が要るため変わりました）。
+- 登録の `COLLECTORS` は `shipcast.collect`（`__init__.py`）にあります。順は git、specdock、orca です。
+:::
+
+## 全体の流れ
+
+```plantuml id=flow
+@startuml
+title SpecDockCollector.collect(repo, day, tz) の流れ
+participant "collect_repo\n(base.py)" as RUN
+participant "SpecDockCollector\n(specdock.py)" as SD
+participant "spec-dock" as CLI
+participant "gh" as GH
+RUN -> SD : collect(repo, day, tz)
+alt spec-dock/workspace.json がない
+  SD --> RUN : 空（何も呼ばない）
+else SpecDockを使うrepository
+  SD -> CLI : scope list --json --project <path>
+  CLI --> SD : ScopeのID・題名・親・Issueの番号
+  SD -> CLI : todo list --status all --json --project <path>
+  CLI --> SD : todoの状態と時刻
+  SD -> GH : issue list --repo <owner/name> --state all ...
+  GH --> SD : Issueの作成・終了の時刻
+  SD -> SD : その日の時刻のものだけをEventにする
+  SD --> RUN : CollectResult(events, warnings)
+end
+@enduml
+```
+
+## 「その日の変化」の決め方
+
+日誌は、その日に起きた変化を書くものです。そこで、どちらも「その日の時刻を持つ変化」だけをEventにします。その日の範囲は、設定の timezone の0時から翌日の0時の前までです（`day_bounds(day, tz)`）。
+
+:::datatable 4種類のEvent
+| kind | 起きたこと | 時刻を取る場所 |
+|---|---|---|
+| `scope_opened` | Scopeが作られた | ScopeのGitHubのIssueの `createdAt` |
+| `scope_closed` | Scopeが閉じた | 同じIssueの `closedAt`（`state` が `CLOSED` のときだけ） |
+| `todo_open` | 本人待ちのtodoが登録された | todoの `created_at` |
+| `todo_done` | todoが完了した | todoの `resolution.at`（`status` が `done` のときだけ） |
+:::
+
+:::warning なぜScopeの時刻をGitHubから取るのか
+`spec-dock scope list --json` の出力には、ID・題名・親・Issueの番号はありますが、作った時刻や閉じた時刻がありません。カタログの内部のファイルを読むのは約束違反（形が変わりうる）なので、Issueの番号で `gh issue list` の結果とつなぎ、そこの時刻を使います（本人の決定 23）。
+:::
+
+:::note 「開いている本人待ちのtodo」の読み方
+親の E2 の要件は「開いている本人待ちのtodo」と書いています。このIssueでは、これを「**その日に登録された**todo」と読みます。前から開いたままのtodoを毎日出すと、同じ出来事が日ごとに重なり、Eventの時刻をその日の中に収める約束（`collect_repo` が確かめる）にも合わないためです。今も開いているかどうかは、Eventの本文に `今の状態: open` のように書きます。取消し（`cancelled`）とサブタスクは出しません。
+:::
+
+### 例（架空の値、日 2026-11-26、tz Asia/Tokyo）
+
+その日は UTC で `2026-11-25T15:00:00Z` から `2026-11-26T15:00:00Z` の前までです。
+
+:::datatable 日の境の扱い
+| Issueの `createdAt` | 日本時間 | その日か |
+|---|---|---|
+| `2026-11-25T14:59:59Z` | 前日 23:59:59 | 入らない |
+| `2026-11-25T15:00:00Z` | 当日 00:00:00 | 入る |
+| `2026-11-26T14:59:59Z` | 当日 23:59:59 | 入る |
+| `2026-11-26T15:00:00Z` | 翌日 00:00:00 | 入らない |
+:::
+
+## 読む3つのコマンド
+
+呼ぶ外部のコマンドは、次の3つの形だけです。どれも読むだけで、対象のrepositoryのGitの状態を変えません。
+
+:::terminal title="SpecDockCollector が呼ぶコマンド（path と repository は例）"
+$ spec-dock scope list --offline --json --project /path/to/demo-app
+$ spec-dock todo list --status all --offline --json --project /path/to/demo-app
+$ gh issue list --repo example-org/demo-app --state all --limit 500 \
+    --json number,title,state,createdAt,closedAt,url
+:::
+
+:::keyvalue つなぎ方
+- `<owner>/<name>` : Scopeの `github_ref`（`gh:example-org/demo-app#12`）から取る
+- Issueとの対応 : Scopeの `number` と Issueの `number`
+- 飛ばすScope : `backend` が `github` でない、`number` がない、対応するIssueが見つからない
+- SpecDockを使わないrepository : `spec-dock/workspace.json` がなければ、何も呼ばずに空を返す（失敗にも警告にもしない）
+:::
+
+## Eventの中身
+
+:::datatable Eventの形（`source` はどれも `specdock`、`actor` は空）
+| kind | `title` | `refs` | 本文の行（空の行は書かない） |
+|---|---|---|---|
+| `scope_opened` | Scopeの題名 | ScopeのID、URL | `Scope: iss-00012（issue）`、`親: epic-00003`、`URL: …` |
+| `scope_closed` | 同じ | 同じ | 上と同じ＋`閉じた理由: completed` |
+| `todo_open` | todoの題名 | todoのID、関連するScope | `todo: t-xxxx（decide）`、`今の状態: open`、`期限: …`、`関連するScope: …`、`登録した側: agent` |
+| `todo_done` | 同じ | 同じ | `todo: t-xxxx（decide）`、`完了した側: human`、`選んだ選択肢: a`、`記録: …`、`関連するScope: …` |
+:::
+
+Eventの `id` は `event_id("specdock", repo.id, "scope:iss-00012:opened")` のように、出来事ごとに決まった値から作ります。同じ日を二度集めても、状態のEventは増えません。
+
+## 失敗したときの動き
+
+:::datatable 失敗の条件
+| ID | 起きること | 動き |
+|---|---|---|
+| F-01 | `gh` がない・認証がない・失敗する・時間内に終わらない・出力の形が違う | **警告**にし、Scopeの出来事だけを出さない。todoの出来事は集める |
+| F-02 | SpecDockを使うrepositoryで、`spec-dock` がない・失敗する・JSONが読めない・形が違う | `CollectError`。そのrepositoryのSpecDockの失敗として示す。Gitの出来事とほかのrepositoryは続ける |
+| — | Issueが500件以上ある | 警告（古いScopeの時刻を読めないことがある） |
+| — | todoのカタログの1つが読めない（`status` が `ok` でない） | 警告 |
+:::
+
+`gh` は時刻を補うだけの道具で、todoはそれなしで集められるので、`gh` の失敗は警告にとどめます。一方、`spec-dock` が読めなければこの出所の何も分からないので、失敗にします。
+
+## 試験の方法
+
+:::steps
+1. `spec-dock` と `gh` の実際の出力の形（項目の名前と入れ子）を写した見本を、`tests/fixtures/specdock/` に3つ置きます。値は架空です（repository `example-org/demo-app` など）。手元の実際の題名・path・repository名は写しません。
+2. 試験は `subprocess.run` を偽物に置き換え、呼ばれた argv に応じて見本を返し、argv を記録します。本物の `spec-dock`・`gh` もネットワークも使いません。
+3. 偽物に、コマンドがない・時間切れ・終了コード1・壊れたJSONを起こさせ、失敗の動きを確かめます。
+4. 本物の `collect_repo` と `Store` に通し、約束に合うこと（誤りなしで保存され、二度目は0件）を確かめます。
+:::
+
+:::datatable 試験と要件
+| 試験 | 確かめること | 要件 |
+|---|---|---|
+| T-01 | Scopeの作成・終了、日の境の4つの時刻、飛ばすScope、Eventの各項目 | R-01 |
+| T-02 | todoの登録・完了、取消しとサブタスクを出さない、本文の行、カタログの警告 | R-02 |
+| T-03 | `gh` の5つの失敗で警告になり、todoだけが残る。Issueの上限の警告 | F-01 |
+| T-04 | `spec-dock` の失敗で `CollectError`。SpecDockを使わないrepositoryで何も呼ばない | R-03、F-02 |
+| T-05 | 呼んだコマンドが3つの形だけ。`collect_repo` で保存でき冪等。登録の順 | R-01、R-03 |
+:::
+
+## 作るファイルと手順
+
+:::tree
+src/shipcast/collect/specdock.py      # + SpecDockCollector
+src/shipcast/collect/__init__.py      # ~ COLLECTORS に SpecDockCollector() を足す
+tests/test_collect_specdock.py        # + T-01〜T-05
+tests/fixtures/specdock/scope-list.json     # + 架空の見本
+tests/fixtures/specdock/todo-list.json      # + 架空の見本
+tests/fixtures/specdock/gh-issue-list.json  # + 架空の見本
+:::
+
+:::steps
+1. **S-01**：架空の見本と、試験の偽物の `subprocess.run` を作る。
+2. **S-02**：試験を先に書いて落ちることを確かめ、`SpecDockCollector` と登録を書いて通す。
+:::
+
+## 担当と関門
+
+:::keyvalue
+- 保証レベル : **light**（collectorを1つ足すだけで、影響はそこに閉じる。読むだけで、PRを戻せば元に戻る）
+- タスク担当 : Claude Opus 5.5 / medium（統括が起動。仕様・説明資料・レビュー・最終品質ゲート・PR・CIの観測）
+- 実装担当 : Codex GPT-6.2 Sol / medium（S-01・S-02、TDD）
+- 仕様のレビュー : `spec-reviewer`（Opus 5.5 / medium）。P0・P1がなくなるまで
+- 区切りのレビュー : なし（手順は2つで、1人の実装担当が続けて書くため）
+- 最終品質ゲート : `quality-gate-reviewer`（Opus 5.5 / medium）。`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`
+- マージ : 統括が行う。タスク担当と実装担当はマージしない
+:::
+
+:::checklist このIssueの完了の確かめ
+- `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が通る
+- 見本から、その日のScopeの作成・終了とtodoの登録・完了だけがEventになる
+- `gh` がなくてもtodoは集まり、警告が出る
+- 呼ぶコマンドが3つの読むだけの形に限られる
+- 最終品質ゲートとPRのCIが合格している
+- 統括に報告した（マージと `spec-dock work finish` は統括が行う）
+:::
+
+要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。この資料と食い違うときは、正本が優先します。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

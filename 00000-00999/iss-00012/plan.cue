@@ -34,11 +34,11 @@ tests: {
 		verifies: ["F-01"]
 	}
 	"T-04": {
-		title:    "`spec-dock` が `FileNotFoundError`、`TimeoutExpired`、標準出力が壊れたJSON、失敗の封筒（`status` `failed`、`error.code` `GIT_FAILED`、終了コード5）、`data.result.items` が配列でない、のとき、scope list と todo list のそれぞれで、D-04 の文の `CollectError` になる（文に `<sub>` とpathか理由を含む）。`spec-dock/workspace.json` のないrepositoryでは、偽物の `subprocess.run` が一度も呼ばれず、`CollectResult()` と同じ（Eventも警告も0件）"
+		title:    "`spec-dock` が `FileNotFoundError`、`TimeoutExpired`、標準出力が壊れたJSON、失敗の封筒（`status` `failed`、`error.code` `GIT_FAILED`、終了コード5。文に `GIT_FAILED: ` を含む）、終了コード1で標準出力が空（文が標準エラーの最後の行を含む）、終了コード0で `status` が `failed` の封筒、`data.result.items` が配列でない、のとき、scope list と todo list のそれぞれで、D-04 の文の `CollectError` になる（文に `<sub>` とpathか理由を含む）。`spec-dock/workspace.json` のないrepositoryでは、偽物の `subprocess.run` が一度も呼ばれず、`CollectResult()` と同じ（Eventも警告も0件）"
 		verifies: ["R-03", "F-02"]
 	}
 	"T-05": {
-		title:    "T-01 の収集で記録した argv が、D-02 の3つの形とちょうど同じ（`spec-dock scope list`、`spec-dock todo list`、`gh issue list --repo example-org/demo-app ...` の順、ほかの呼び出しがない）で、`env` に `GH_PROMPT_DISABLED=1` がある。`collect_repo`（本物の `Store(tmp_path)`、`collectors=(SpecDockCollector(),)`）が `errors` なしで保存し、二度目の `saved` が0。`COLLECTORS` の `name` の並びが `[\"git\", \"specdock\"]`"
+		title:    "T-01 の収集で記録した argv が、D-02 の3つの形とちょうど同じ（`spec-dock scope list`、`spec-dock todo list`、`gh issue list --repo example-org/demo-app ...` の順、ほかの呼び出しがない）で、`env` に `GH_PROMPT_DISABLED=1` がある。`collect_repo`（本物の `Store(tmp_path)`、`collectors=(SpecDockCollector(),)`）が `errors` なしで保存し、二度目の `saved` が0。見本の題名を空にしたScopeとtodoが `（題名のないScope）`・`（題名のないtodo）` になる。`COLLECTORS` の `name` の並びが `[\"git\", \"specdock\"]`"
 		verifies: ["R-01", "R-03"]
 	}
 }
