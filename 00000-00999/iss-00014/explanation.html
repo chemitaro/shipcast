@@ -13,7 +13,7 @@ title: iss-00014 モデルの経路 ― 送信の入口・伏せる処理・agy 
 lead: 分析と書き手のモデルを、設定の経路の名前（codex・antigravity・claude・fake）で呼び分ける部品を作ります。外部のモデルへの送信はすべて1つの入口を通り、秘密情報らしい文字列を伏せ、エージェントの中からは `agy` を呼びません。
 category: 説明資料（Issue・strict）
 audience: このIssueの実装担当・レビュアー、後の iss-00015・iss-00016 の担当、統括
-status: 仕様を確定（2026-11-26・仕様レビュー待ち）
+status: 仕様を確定（2026-11-26・仕様レビュー2回目）
 updated: 2026-11-26
 docid: iss-00014
 ---
@@ -51,6 +51,8 @@ title complete() の中で起きる順番
 start
 :prompt・system が文字列か確かめる;
 note right: 文字列でなければ TypeError
+:環境を1回だけ写し取る;
+note right: 写せなければ止める。\n印の検査と子の環境に同じ写しを使う
 if (経路が antigravity?) then (はい)
   if (エージェントの印がある?) then (ある)
     :RouteRefused で止める;
@@ -88,10 +90,10 @@ stop
 :::datatable 伏せる規則
 | 番号 | 対象 | 例（架空の値） | 結果 |
 |---|---|---|---|
-| RD-01 | PEMの秘密鍵の塊（閉じがなければ末尾まで） | `-----BEGIN RSA PRIVATE KEY-----` … `-----END …-----` | `[伏せた]` |
+| RD-01 | PEMの秘密鍵の塊（同じ種類の閉じの行まで。なければ末尾まで） | `-----BEGIN RSA PRIVATE KEY-----` … `-----END …-----` | `[伏せた]` |
 | RD-02 | URLの中の利用者:パスワード | `https://user:pass@example.com` | `https://[伏せた]@example.com` |
 | RD-03 | `Bearer` の後の値 | `Bearer DUMMYDUMMY` | `Bearer [伏せた]` |
-| RD-04 | 秘密の名前の鍵の値（行の末尾まで） | `export DB_PASSWORD="x"`、`api_token: x` | `export DB_PASSWORD=[伏せた]` |
+| RD-04 | 秘密の名前の鍵の値（引用ならその全体、なければ行末・`}`・次の鍵まで） | `export DB_PASSWORD="x"`、`{"api_token": "x", "title": "t"}` | `export DB_PASSWORD=[伏せた]`、`{"api_token": [伏せた], "title": "t"}` |
 | RD-05 | GitHub のトークン | `ghp_`・`gho_`・`ghu_`・`ghs_`・`ghr_` で始まる | `[伏せた]` |
 | RD-06 | GitHub の細かい権限のトークン | `github_pat_` で始まる | `[伏せた]` |
 | RD-07 | `sk-` の鍵 | OpenAI・Anthropic などの鍵 | `[伏せた]` |
@@ -99,6 +101,10 @@ stop
 | RD-09 | Slack のトークン | `xoxb-`・`xoxp-` など | `[伏せた]` |
 | RD-10 | Google の API の鍵 | `AIza` と35文字 | `[伏せた]` |
 | RD-11 | JWT | `eyJ…​.eyJ…​.…` | `[伏せた]` |
+:::
+
+:::note JSONと日本語の中でも当たるようにしました
+呼ぶ側は出来事をJSONにして渡します。会話のログの中のJSONは、外側のJSONの中で引用符が `\"` になるので、RD-04 はこの形の鍵と値も伏せます。1行のJSONでは、その鍵の値だけを伏せ、ほかの鍵は残します。また、トークンの形の規則（RD-05〜RD-11）は、Python の `\b` を使わず、ASCII の英数字で前後を区切るので、「トークン」のような日本語のすぐ隣にあっても伏せます。
 :::
 
 :::columns
@@ -123,6 +129,7 @@ RD-04 は、鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` など�
 :::
 
 - `RouteRefused` は、見つけた印の **名前だけ** を示し、値は含めません。本人は、普通の端末か launchd から実行し直します。
+- `complete` は呼ぶたびに環境を1回だけ写し取り、その写しで印を調べ、同じ写しを子のプロセスに渡します。調べた環境と渡す環境が食い違いません。
 - 重ねの守りとして、子のプロセスを作る関数 `run_subprocess` も、`agy` を起動する前に本物の環境変数を調べます。試験で環境を差し替えても、作業者の中では `agy` が起動しません。
 - 利用者が普段の環境に `CODEX_HOME` などを置くと、antigravity の経路は止まります。閉じる側に倒すため、これを受け入れます。
 
@@ -132,13 +139,13 @@ RD-04 は、鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` など�
 | 経路 | 使う場面 | 呼び方の要点 | 応答の取り出し |
 |---|---|---|---|
 | `fake` | 試験・予行 | 子のプロセスを作らない。`responder` を渡せば、伏せた後の入力でそれを呼ぶ | 受け取った値を並べた決まったJSON |
-| `codex` | 分析の既定 | `codex exec --model … --sandbox read-only --ignore-user-config --ephemeral --cd <空のディレクトリ> --output-last-message <ファイル> -` | 最後のメッセージのファイル |
+| `codex` | 分析の既定 | `codex exec --model … --disable shell_tool --disable unified_exec --disable view_image --disable plugins --sandbox read-only --ignore-user-config --ephemeral --cd <空のディレクトリ> --output-last-message <ファイル> -` | 最後のメッセージのファイル |
 | `claude` | 予備 | `claude -p --model … --strict-mcp-config --no-session-persistence --tools ""` | 標準出力 |
 | `antigravity` | 書き手の既定 | `agy -p <text> --output-format json --model gemini-4-neon-high --mode plan --sandbox` | JSONの `response`（`status` が `SUCCESS` のとき） |
 :::
 
 :::details 引数をどう確かめたか
-- `codex`（codex-cli 0.172.0）と `claude` は、`--help` で確かめました。
+- `codex`（codex-cli 0.172.0）と `claude` は、`--help` で確かめました。`codex` の4つの `--disable` は、モデルを呼ばない `codex debug prompt-input` で、手元を読む道具がモデルに見える一覧から消えることを確かめました。
 - `agy`（1.5.12）は **起動していません**。Antigravity の公式の文書（headless と CLI reference のページ、2026-11-26）で確かめました。文書は、普通の標準入力からプロンプトを読む方法を示さないので、プロンプトは `-p` の引数で渡し、長さに 200,000 バイトの上限を付けます。
 - 本物の `agy` での最初の確かめは、本人の手動の実行です。引数が誤っていれば `RouteFailed` として見つかります。
 :::
@@ -167,6 +174,8 @@ RD-04 は、鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` など�
 - 伏せる処理が失敗したら、実装が呼ばれない（T-06）
 - 設定の見本に、より安いモデル `gpt-6-luna` の名前がある（T-07）
 - 長すぎるプロンプトで `agy` を起動しない（T-08）
+- 本物の runner が `subprocess.run` に正しい値を渡す（偽物に差し替えて。T-09）
+- 道具を止める・狭める引数が付いている（T-10）
 :::
 
 :::tip 試験は本物を起動しません
@@ -179,8 +188,10 @@ RD-04 は、鍵の名前に `PASSWORD`・`SECRET`・`TOKEN`・`API_KEY` など�
 
 ## 残るリスク
 
-:::warning 完全には止められないこと
-- `codex` と `agy` には、道具を完全に止める引数がありません。出来事の中の指示（プロンプトの注入）で、モデルが手元のファイルを読むと、その中身は伏せる処理を通りません。空の作業ディレクトリ、読み取りだけの sandbox、`plan` のモードで狭め、後のIssueのプロンプトでも禁じます。
+:::warning 完全には止められないこと（F-05）
+- `codex` と `agy` はエージェントのCLIで、道具を持ちます。出来事の中の指示（プロンプトの注入）で道具が手元のファイルを読むと、その中身は伏せる処理を通りません。
+- `claude` は `--tools ""` で道具なし、`codex` は手元を読む4つの道具を外します。
+- `agy -p` には、1回の実行だけ道具を止める方法が公式の文書にありません。`plan` のモード・`--sandbox`・空の作業ディレクトリで狭め、残る危険は受け入れて記録しました（タスク担当の判断、2026-11-26。統括が答えないまま止まったため）。本人がマージの前に確かめ、別の選択（設定を読んで止める、書き手を `claude` にする）を選べば直します。
 - Antigravity の CLI が自分の道具の中で付ける印は、文書にありません。2026-12-19 の規約の読み直しのときに見直します。
 :::
 
