@@ -132,6 +132,7 @@ def test_ci_runs_local_checks_for_pull_requests_and_main_pushes():
 
     assert "\non:\n  pull_request:\n  push:\n    branches: [main]\n" in workflow
     assert "\npermissions:\n  contents: read\n" in workflow
+    assert "      - uses: astral-sh/setup-uv@v10.4.0\n" in workflow
     checks = ("uv sync --locked", "uv run ruff check", "uv run pytest -q")
     assert "".join(f"      - run: {check}\n" for check in checks) in workflow
 
