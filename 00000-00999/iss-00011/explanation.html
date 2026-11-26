@@ -9,27 +9,240 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: iss-00011 Gitの出来事を集める
-lead: collectorの約束と `shipcast collect` を作り、その日に正本のbranchに入ったcommitとmergeを集めます。
-category: 説明資料（Issue）
-audience: 実装を担当するエージェント
-status: 仕様を確定
+title: iss-00011 collectorの約束とGitの出来事の収集
+lead: 出所ごとの「collector」が守る共通の約束と、`shipcast collect` のコマンドを作り、最初の出所としてGitから「その日に正本のbranchに入ったcommitとmerge」を集めます。対象のrepositoryは読むだけで、何も書き換えません。
+category: 説明資料（Issue・standard）
+audience: このIssueのタスク担当・実装担当、後のcollector（iss-00012 SpecDock、iss-00013 Orca）と、collect を呼ぶ iss-00016・iss-00021 の担当、統括
+status: 仕様を具体化（仕様のレビューの前）
+updated: 2026-11-26
+docid: iss-00011
 ---
 
-## このIssueで作るもの
+## この資料で分かること
 
-collectorの約束と `shipcast collect` を作り、その日に正本のbranchに入ったcommitとmergeを集めます。親のE2の説明資料に、全体の約束と背景があります。
-
-:::summary 確かめる点
-- 読むだけの操作で集める
-- Gitでないpathは失敗として記録する
+:::summary
+- 「collector」とは何で、なぜ約束を先に1つ決めるのか
+- `Collector`・`CollectResult`・`CollectError`・`collect_repo` の役割と、後のcollectorが守ること
+- `shipcast collect` の使い方、表示、終了コード
+- Gitの「その日に入った」の決め方（first-parent の列と、mergeが取り込んだcommit）
+- 対象のrepositoryを書き換えないことを、どう守り、どう確かめるか
 :::
 
-:::note 保証レベルと前提の更新（2026-11-26）
-保証レベルは **`standard`** です。`shipcast.collect.base` の共通の約束は、SpecDockとOrcaの収集（iss-00012、iss-00013）が依存する境界です。iss-00012 はこのIssueの後に始めます。
+## 背景：日誌の素材を3つの出所から集める
+
+shipcastは、登録したrepositoryで1日に起きたことを集め、話題にまとめ、日誌に書きます。素材の出所は3つあります。
+
+:::cards cols=3
+### Git {icon=branch badge=iss-00011}
+正本のbranchに入ったcommitとmerge。このIssueで作ります。
+
+### SpecDock {icon=list badge=iss-00012}
+その日に作られた・閉じたScope、本人待ちのtodo。
+
+### Orca（任意） {badge=iss-00013}
+その日のエージェントとの会話。
 :::
 
-要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。
+出所ごとに読み方は違いますが、集めた結果は同じ「出来事（Event）」の形にして、手元のSQLiteの状態に保存します。Eventの型と状態の置き場は、すでに iss-00010 が `shipcast.model`・`shipcast.state` に作りました。このIssueは、その間をつなぐ **collectorの約束** と、最初のcollector（Git）を作ります。
+
+:::note 親の約束と保証レベル
+親の E2（epic-00003）の R-01（Git）・R-04（書き換えない）・F-02（読めないrepositoryは失敗として記録し、ほかは続ける）を、このIssueが受け持ちます。保証レベルは **standard** です。約束は後の3つのIssueが依る境界ですが、対象のrepositoryを読むだけで、誤っても日誌が欠けるだけで、PRを戻して集め直せば回復できるからです。
+:::
+
+## 全体の流れ
+
+```plantuml id=flow
+@startuml
+title shipcast collect の流れ
+actor "利用者・夜の実行" as U
+participant "shipcast collect\n(command.py)" as CMD
+participant "collect_repo\n(base.py)" as RUN
+participant "GitCollector\n(git.py)" as GIT
+participant "後のcollector\n(SpecDock・Orca)" as LATER
+database "状態\n(state.sqlite3)" as DB
+U -> CMD : --repo / --date
+CMD -> CMD : 設定を読む・対象と日を決める
+loop 登録したrepositoryごと
+  CMD -> RUN : collect_repo(store, repo, day, tz, COLLECTORS)
+  RUN -> GIT : collect(repo, day, tz)
+  GIT --> RUN : CollectResult か CollectError
+  RUN -> LATER : collect(repo, day, tz)
+  LATER --> RUN : CollectResult か CollectError
+  RUN -> RUN : 約束に合うか確かめる
+  RUN -> DB : add_events（同じIDは無視）
+  RUN --> CMD : RepoCollection（件数・警告・失敗）
+  CMD -> U : 件数・警告・失敗を表示
+end
+@enduml
+```
+
+## collectorの約束
+
+collectorは、1つの出所から、1つのrepositoryの1日分の出来事を読むものです。約束は `shipcast.collect.base` にあります。
+
+:::keyvalue 約束の部品
+- `Collector` : `name`（`git`・`specdock`・`orca` のどれか）と `collect(repo, day, tz) -> CollectResult` を持つもの（Protocol）
+- `CollectResult` : `events`（Eventの並び）と `warnings`（人に知らせる文の並び）
+- `CollectError` : そのrepositoryをこの出所から読めないときに投げる例外。そのrepositoryの失敗になる
+- `day_bounds(day, tz)` : その日の範囲（0時から翌日の0時の前まで）。状態の `events_for` と同じ区切り
+- `collect_repo(store, repo, day, *, tz, collectors)` : collectorを順に呼び、確かめ、保存し、`RepoCollection` を返す
+- `COLLECTORS` : 登録の並び（`shipcast.collect` に置く）。今はGitの1つで、後のIssueが1行ずつ足す
+:::
+
+:::steps 後のcollectorが守ること
+1. 読むだけにします。対象のrepositoryや道具の状態を変えません。
+2. 返すEventは、`source` が自分の `name`、`repo_id` が登録のid、時刻 `at` がその日の範囲に入るものだけです。`id` は `event_id(name, repo.id, 出所の中で一意の値)` で作ります。
+3. 読めないときは `CollectError` を投げます。続けられるが知らせたいこと（Orcaが動いていない、など）は `warnings` に入れます。
+4. 想定していない例外（プログラムの誤り）は、受け止めずにそのまま投げます。
+:::
+
+`collect_repo` は、約束に合わないEventを1つでも返したcollectorについて、そのEventを全部捨て、失敗として示します。失敗したcollectorがあっても、ほかのcollectorのEventは保存します。保存は同じIDを無視するので、同じ日を何度集め直しても増えません。
+
+:::warning epic-00003 の約束から変えた点
+- `collect` の引数に、日の区切りの `tz` を足しました（`(repo, day)` → `(repo, day, tz)`）。SpecDockとOrcaも、その日の判定に設定の timezone が要るためです。iss-00012・iss-00013 は、この形で書きます。
+- `COLLECTORS` は `shipcast.collect.base` ではなく `shipcast.collect` に置きます。Gitのcollectorが `base` を読み込むので、`base` に置くと読み込みが循環するためです（epic-00003 の D-01 の置き場と同じ）。
+:::
+
+## `shipcast collect` の使い方
+
+:::terminal title="使い方の例（値は架空のもの）"
+$ shipcast collect --repo demo-app --date 2026-11-26
+demo-app 2026-11-26: 5件を集め、5件を新しく保存しました
+$ shipcast collect --repo demo-app --date 2026-11-26
+demo-app 2026-11-26: 5件を集め、0件を新しく保存しました
+:::
+
+:::datatable 引数と表示
+| もの | 内容 |
+|---|---|
+| `--repo ID` | 集めるrepositoryのid。省くと登録の全部を、設定の順に集めます |
+| `--date YYYY-MM-DD` | 集める日。省くと設定の timezone の今日です |
+| 標準出力 | repositoryごとに `<id> <日>: N件を集め、M件を新しく保存しました` |
+| 標準エラー | `shipcast collect: 警告: <id>: <collector>: <文>`、`shipcast collect: 失敗: <id>: <collector>: <文>` |
+| 終了コード | 全部が失敗なしなら0（警告だけなら0）、1つでも失敗があれば1、引数の誤りは2 |
+:::
+
+設定が読めない、`--repo` が登録にない、登録が1つもない、状態の置き場を開けないときは、何も集めず、直し方を示して終了コード1で止まります。`collect` は実行の記録（`runs` の表）には書きません。`runs` は夜の実行（iss-00021 の `shipcast run`）が、`collect_repo` の結果から記録します。
+
+## Gitの「その日に入った」の決め方
+
+「その日に正本のbranchに入ったcommit」を、次のように決めます。正本のbranchは、設定の `ref`（既定 `main`）です。
+
+```plantuml id=history
+@startuml
+title 正本の歴史（first-parent）と、mergeが取り込んだcommit
+left to right direction
+rectangle "前日 23:59\ncommit A" as A
+rectangle "当日 09:00\ncommit B" as B
+rectangle "当日 15:00\nmerge M" as M
+rectangle "翌日 00:00\ncommit D" as D
+rectangle "2日前\nfeatureのcommit F" as F
+rectangle "当日\n未統合のcommit X" as X
+A --> B : 第1の親
+B --> M : 第1の親
+M --> D : 第1の親
+F --> M : 第2の親（取り込み）
+@enduml
+```
+
+:::steps
+1. refから、第1の親だけをたどった列（正本の歴史）を読みます。この列のうち、commitの時刻（committer date）がその日の範囲に入るもの（図の B と M）が、その日に入ったcommitです。親が2つ以上なら kind `merge`、ほかは kind `commit` です。
+2. その日のmerge（M）が取り込んだcommit（F）も、その日に入ったものとして集めます。F自身の時刻は2日前ですが、Eventの時刻は M の時刻にし、本文に `マージ <Mの12桁> で入った（commitの時刻 …）` と書きます。
+3. 前日（A）と翌日（D）のcommit、refに入っていない作業用のbranchのcommit（X）は入りません。
+:::
+
+:::note なぜ単純に `git log <ref> --since --until` にしないのか
+refから届く全部のcommitをcommitの時刻で絞ると、2日前に作って当日にmergeしたF は「2日前」に数えられます。2日前の時点ではまだ正本に入っていなかったので、その日に集めていればFはどの日にも入りません。さらに、集める時刻によって結果が変わります。first-parent の列とmergeの取り込みで決めれば、結果は正本の歴史だけで決まります。
+:::
+
+:::datatable Eventの形
+| 項目 | 正本の歴史のcommit | mergeが取り込んだcommit |
+|---|---|---|
+| `id` | `event_id("git", repo.id, SHA)` | 同じ |
+| `kind` | 親が2つ以上なら `merge`、ほかは `commit` | 同じ（そのcommit自身の親の数） |
+| `at` | commitの時刻 | 取り込んだmergeの時刻 |
+| `title` | commitの題名（空なら `（題名のないcommit）`） | 同じ |
+| `body` | 本文＋`変更したファイル: N件`（mergeは＋`取り込んだcommit: K件`） | 本文＋`変更したファイル: N件`＋`マージ … で入った（commitの時刻 …）` |
+| `refs` | `(SHA,)` | `(SHA, mergeのSHA)` |
+| `actor` | 作者の名前 | 同じ |
+:::
+
+1つのmergeが200件を超えるcommitを取り込んだときは、新しい方の200件だけを集め、警告で知らせます。fast-forward で正本に入ったcommitは、入った時刻の記録がGitにないので、commitの時刻の日に数えます（GitHubのPRのmergeでは起きません）。
+
+## 書き換えないことの守り方
+
+:::checklist Gitの呼び方の決まり
+- すべて `git --no-optional-locks -C <path> <subcommand> ...` の形で呼ぶ
+- 呼ぶのは `rev-parse`・`log`・`diff-tree` の3つだけ（`fetch`・`checkout`・`status`・`reset` などは呼ばない）
+- refは最初に1回だけ40桁のSHAに直し、以後はそのSHAを読む。`-` で始まるrefは使わず、`--end-of-options` を付ける
+- 呼んだ側の `GIT_DIR`・`GIT_WORK_TREE`・`GIT_INDEX_FILE` などを消し、別のrepositoryを読まない
+- pathがGitの最上位でなければ読まない（親のrepositoryを読み違えないため）
+:::
+
+試験では、収集の前後で `.git/HEAD` と `.git/index`（バイト列と更新の時刻）、refの一覧、作業ツリーの状態とファイルが同じことを確かめます。さらに、Gitの呼び出しを全部記録し、上の決まりを守っていることを見ます。
+
+## 失敗したときの動き
+
+:::datatable 失敗の条件
+| ID | 起きること | 止まり方 |
+|---|---|---|
+| F-01 | pathがない・Gitでない・Gitの最上位でない・refがない・gitを呼べない・時間内に終わらない | `CollectError`。そのrepositoryの失敗として `失敗: <id>: git: <文>` を示し、ほかのrepositoryは続ける。終了コード1 |
+| F-02 | 設定が読めない・`--repo` が登録にない・登録が0件・状態の置き場を開けない | 何も集めず、直し方を示して終了コード1 |
+:::
+
+## 作るファイルと手順
+
+:::tree
+src/shipcast/collect/__init__.py   # + COLLECTORS
+src/shipcast/collect/base.py       # + 約束と collect_repo
+src/shipcast/collect/git.py        # + GitCollector
+src/shipcast/collect/command.py    # + shipcast collect
+src/shipcast/cli.py                # ~ collect の接続（2行だけ）
+tests/test_collect.py              # + 約束とコマンドの試験
+tests/test_collect_git.py          # + Gitの試験
+tests/test_cli.py                  # ~ 未実装の一覧から collect を外す
+:::
+
+:::datatable 手順
+| ID | 内容 | 要件 |
+|---|---|---|
+| S-01 | collectorの約束と `collect_repo`（架空のcollectorで試験） | R-01 |
+| S-02 | `shipcast collect` のコマンドと `cli.py` の接続 | R-01、F-02 |
+| S-03 | Gitのcollectorと登録 | R-02、R-03、F-01 |
+:::
+
+:::datatable 試験の一覧
+| ID | 確かめること | 要件 |
+|---|---|---|
+| T-01 | その日のcommit・merge・取り込んだcommitだけが、決めた形で集まる | R-02 |
+| T-02 | 保存され、二度目は増えない（`collect_repo` とCLIの端から端） | R-01 |
+| T-03 | Gitでない・ない・最上位でないpath、ないref、gitがないときの失敗と、ほかのrepositoryの継続 | F-01 |
+| T-04 | 収集の前後で HEAD・index・ref・作業ツリーが変わらず、Gitの呼び方が決まりどおり | R-03 |
+| T-05 | 失敗・警告・約束に合わないEventの扱い、`COLLECTORS` の登録 | R-01 |
+| T-06 | CLIの既定値、表示、終了コード、失敗で何も書かないこと | R-01、F-02 |
+| T-07 | 取り込みが上限を超えたときの打ち切りと警告 | R-02 |
+:::
+
+## 担当と関門
+
+:::keyvalue
+- タスク担当 : Claude Opus 5.5 / medium（統括が起動。仕様・説明資料・レビュー・最終品質ゲート・PR・CIの観測）
+- 実装担当 : Codex GPT-6.2 Sol / medium（S-01〜S-03、TDD）
+- 仕様のレビュー : `spec-reviewer`（Opus 5.5 / high）。P0・P1がなくなるまで
+- 区切りのレビュー : なし（手順は3つで、1人の実装担当が続けて書くため）
+- 最終品質ゲート : `quality-gate-reviewer`（Opus 5.5 / medium）。`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`
+- マージ : 統括が行う。タスク担当と実装担当はマージしない
+:::
+
+:::checklist このIssueの完了の確かめ
+- `uv sync --locked`、`uv run ruff check`、`uv run pytest -q` が通る
+- 架空のrepositoryで、その日に入ったcommitとmergeだけが集まり、二度集めても増えない
+- 収集の前後で対象のrepositoryが変わらない
+- 最終品質ゲートとPRのCIが合格している
+- 統括に報告した（マージと `spec-dock work finish` は統括が行う）
+:::
+
+要件・設計・計画の正本は、同じフォルダーの `requirement.cue`、`design.cue`、`plan.cue` です。この資料と食い違うときは、正本が優先します。
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>
