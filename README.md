@@ -22,6 +22,39 @@ AIエージェントが開発をほぼ自動で進めると、物事は前に進
 - このrepositoryには汎用のエンジンだけを置きます。公開してよい内容に限ります。
 - 個人の設定（対象のrepository、公開範囲）と実行の状態（素材、日誌、下書き、投稿の履歴）は、このrepositoryの外に置きます。
 
+## 導入と毎晩の実行（`shipcast schedule`）
+
+### 導入
+
+```sh
+uv tool install git+https://github.com/chemitaro/shipcast
+uv tool update-shell
+```
+
+手元のソースから導入する場合は、main の checkout で `uv tool install .` を実行します。更新は `uv tool upgrade shipcast` です。夜間の登録には `uv tool install` で入れた `shipcast` を直接実行してください。開発用 worktree の `.venv` にある実行ファイルや、`uv run` 経由で見つかる `.venv` の実行ファイルは登録できません。
+
+### 登録とログ
+
+対象の repository を `shipcast repo add <path>` で登録し、macOS で次を実行します。
+
+```sh
+shipcast schedule install
+```
+
+出力に表示された `launchctl bootstrap gui/<uid> ...` を実行すると読み込まれます。すでに読み込んでいる場合は、先に出力に表示された `launchctl bootout ...` を実行します。書き出しと読み込みをまとめて行うには `shipcast schedule install --load` を使います。
+
+毎日 03:00（Mac の時計の時刻）に `shipcast run` が動き、設定の `timezone` での前日の日誌を作ります。Mac と設定の時間帯が異なると、どの日を前日とするかの境目がずれます。登録時の `PATH` が夜間の実行に使われるため、`PATH` を変えたら登録をやり直してください。
+
+標準出力は `<state_dir>/logs/nightly.out.log`、標準エラーは `<state_dir>/logs/nightly.err.log` に記録します。既定のログの置き場は `~/.local/state/shipcast/logs/` です。repository ごとの実行結果は `<state_dir>/state.sqlite3` の `runs` に記録します。
+
+### 解除
+
+`shipcast schedule uninstall` で plist を削除し、表示された `launchctl bootout ...` で読み込んだ登録を外します。まとめて行うには `shipcast schedule uninstall --unload` を使います。
+
+### 外付けvolumeを読むためのフルディスクアクセス
+
+「システム設定」→「プライバシーとセキュリティ」→「フルディスクアクセス」で、`shipcast schedule install` が表示した Python の実行ファイルを追加します。追加画面で `Cmd+Shift+G` を押すと、表示されたパスを入力できます。Python を入れ替えたら追加し直してください。手で `shipcast run` を動かす場合は、実行するターミナルに許可を付けます。
+
 ## 日誌を読む（`shipcast serve`）
 
 日誌は、デザインシステムで描くWebページとして、手元のPCから配信して読みます。

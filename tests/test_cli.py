@@ -63,27 +63,21 @@ def test_module_help_matches_cli_help(capsys):
     assert result.stderr == expected.err == ""
 
 
-@pytest.mark.parametrize(
-    ("command", "issue_id"),
-    [
-        ("schedule install", "iss-00022"),
-        ("schedule uninstall", "iss-00022"),
-    ],
-)
-def test_unimplemented_leaf_reports_issue_without_writing(
-    command, issue_id, tmp_path, monkeypatch, capsys
-):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    for directory in ("CACHE", "CONFIG", "DATA", "STATE"):
-        monkeypatch.setenv(f"XDG_{directory}_HOME", str(tmp_path / directory.lower()))
-    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path / "runtime"))
+def test_unimplemented_leaf_reports_issue_without_writing(tmp_path, monkeypatch, capsys):
+    import argparse
 
-    assert main(command.split()) == 2
+    from shipcast import cli
+
+    monkeypatch.chdir(tmp_path)
+    parser = argparse.ArgumentParser()
+    cli._configure_leaf(parser, cli.Entry("demo", "見本の葉"), "demo", "iss-00000")
+    args = parser.parse_args([])
+
+    assert args.func(args) == 2
 
     output = capsys.readouterr()
     assert output.out == ""
-    assert output.err == f"shipcast {command}: 未実装です（{issue_id} で作ります）\n"
+    assert output.err == "shipcast demo: 未実装です（iss-00000 で作ります）\n"
     assert list(tmp_path.iterdir()) == []
 
 

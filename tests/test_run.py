@@ -11,9 +11,9 @@ import pytest
 
 from shipcast.cli import main
 from shipcast.collect.base import CollectError, CollectResult
-from shipcast.config import load_config
 from shipcast.model import Event, event_id, journal_path, parse_journal
 from shipcast.models import RouteFailed, get_route
+from shipcast.neta import NetaSprout
 from shipcast.state import Store
 
 REPOS = ("demo-app", "other-app")
@@ -166,15 +166,20 @@ def test_run_help_shows_repo_and_date(capsys):
 
 @pytest.mark.parametrize("selected", [False, True])
 def test_run_writes_and_records_selected_repositories(run_cli, monkeypatch, capsys, selected):
-    run = run_cli.module
-    from shipcast.write import write_day
+    from shipcast import write
 
+    run = run_cli.module
     extensions_passed = []
+
+    class Extension:
+        def render(self, repo_id, day, stories, events):
+            return None
 
     def capture_extensions(*args, **kwargs):
         extensions_passed.append(kwargs["extensions"])
-        return write_day(*args, **kwargs)
+        return write.write_day(*args, **kwargs)
 
+    monkeypatch.setattr(write, "EXTENSIONS", (Extension(),))
     monkeypatch.setattr(run, "write_day", capture_extensions)
     day = date(2026, 11, 20) if selected else DAY
     args = ["run", "--repo", REPOS[0], "--date", str(day)] if selected else ["run"]
@@ -199,14 +204,40 @@ def test_run_writes_and_records_selected_repositories(run_cli, monkeypatch, caps
             assert record.started_at <= record.finished_at
             lines.append(f"{repo_id} {day}: 日誌を書きました（出来事 1件、話題 1件）: {path}")
             assert f"shipcast run: 警告: {repo_id}: git: 試験用の警告" in output.err
-        assert extensions_passed == [run.journal_extensions_for(store, load_config())] * len(
-            expected
-        )
-        assert extensions_passed == [None] * len(expected)
+    assert len(extensions_passed) == len(expected)
+    for extensions in extensions_passed:
+        assert extensions is not None
+        assert extensions[:-1] == write.EXTENSIONS
+        assert isinstance(extensions[-1], NetaSprout)
     assert output.out.splitlines() == [
         *lines,
         f"shipcast run: {day}: 成功 {len(expected)}件、失敗 0件",
     ]
+
+
+def test_run_appends_sprout_when_points_reach_the_configured_threshold(run_cli):
+    analyze_reply = run_cli.replies["fake-analyst"]
+
+    def scored_reply(prompt, system, want_json):
+        response = json.loads(analyze_reply(prompt, system, want_json))
+        response["stories"][0]["neta"]["score"] = 2
+        return json.dumps(response)
+
+    run_cli.replies["fake-analyst"] = scored_reply
+    base_config = run_cli.config_path.read_text(encoding="utf-8")
+    journal = journal_path(run_cli.journal_dir, REPOS[0], DAY)
+
+    def run_at_threshold(threshold):
+        run_cli.config_path.write_text(
+            f"{base_config}\n[neta]\nthreshold = {threshold}\n", encoding="utf-8"
+        )
+        assert main(["run", "--repo", REPOS[0], "--date", DAY.isoformat()]) == 0
+        with Store(run_cli.state_dir) as store:
+            assert store.neta_balance(REPOS[0]) == 2
+        return parse_journal(journal.read_text(encoding="utf-8"))[1]
+
+    assert ":::tip 発信の芽（ネタポイント 2）\n- 見本の話題\n:::" in run_at_threshold(2)
+    assert ":::tip 発信の芽" not in run_at_threshold(3)
 
 
 @pytest.mark.parametrize(
@@ -412,6 +443,9 @@ def test_with_tcc_hint_only_adds_instructions_to_marked_errors(run_cli, marked):
         assert original == base
         assert "フルディスクアクセス" in hint
         assert "launchd" in hint and "ターミナル" in hint
+        assert "`shipcast schedule install` が示す Python の実行ファイル" in hint
+        assert "README の「導入と毎晩の実行」の節" in hint
+        assert "launchd から動かすときは `shipcast` の実行ファイル" not in hint
     else:
         assert message == base
 
