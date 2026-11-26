@@ -23,8 +23,38 @@ ID: "iss-00022"
 - 経緯：1回目は合格（P2 1件：夜の実行の TCC の案内（`run.py` の `_TCC_HINT`）が install・README の案内と食い違う。P3 2件：F-01 の題名が判定より強い、timezone のずれを README に書く約束が D-08・T-09 にない）。安価で、夜の失敗時に本人が読む案内に効くので受け入れて直し（R-05・D-07・T-10 の追加、F-01 の題名、D-08・T-09 の timezone）、2回目で全体を見直してもらった
 - 結果のファイル：shipcastの `.workbench/spec-review/iss-00022/`（`round-1.json`・`round-2.json` と `.check.json`、`review-response.md`）
 
+### 最終品質ゲート（2026-11-27）
+
+- 結果：**合格**（キャンペーン `iss-00022-fqg-1` の attempt 01）
+- 合格のコミット：`1d92763b226bc795866046a7d0347236704ca9b5`（範囲 `e101f40..1d92763`、clean）
+- 主：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。pass、P0 0・P1 0・P2 0・P3 0、coverage complete。観点 functional-correctness・requirements-closure・test-adequacy・api-contract・security-baseline
+- 試験：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（848 passed）がすべて exit 0（タスク担当の試験レーン）
+- 2人目：none（standard）
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00022-fqg-1/closure.md`
+
 ## Outcome
+
+- 実装担当：Codex（gpt-6.2-sol / medium、Orca dispatch `ctx_3871ec17ceaa`）。区切りのレビューはなし（plan の関門）
+- S-01 `e901cae`：`shipcast.schedule` の `build_plist`・`nightly_environment`・`find_program`（`.venv` を断る）
+- S-02 `2bad8b4`：`schedule install`（plist と `logs/`、既定は読み込みのコマンドを示すだけ、`--load` のときだけ bootout → bootstrap）・`uninstall`（`--unload` のときだけ bootout）、`cli.py` の接続
+- S-03 `0101347`：`run.journal_extensions_for` を `write.journal_extensions(store, config.neta.threshold)` に接続、TCC の案内を「`shipcast schedule install` が示す Python の実行ファイル」に統一
+- S-04 `1d92763`：README の「導入と毎晩の実行（`shipcast schedule`）」の節
 
 ## Verification
 
+- 開始 `e101f40` で `test_commands` 全 exit 0（828 passed）。各 step で Red → Green（実装メモ `.workbench/implement/iss-00022/report.md`）。最終 848 passed
+- 試験は一時の HOME・`shutil.which`／`launchctl` の偽物・`subprocess.run` の見張りだけで、本物の `~/Library/LaunchAgents/`・`launchctl`・外部モデルに触れない
+
 ## Residual Risks / Follow-ups
+
+- 本人の手動の確かめ：`shipcast schedule install --load` での読み込み、3時の起動、外付けvolumeでのフルディスクアクセス（Python の実体で足りるか。requirement の questions）
+- launchd の 03:00 は Mac の時計の時刻。設定の `timezone` と違うと前日の境目がずれる（README に記載）
+- 並行の iss-00020 と `cli.py`・`tests/test_cli.py`・README の付近で行の衝突がありうる
+- README の「状態」の節（「動くコードはまだありません」）は古いが、このIssueの外
+
+## 逸脱と判断
+
+- 空の `SHIPCAST_CONFIG` は `config_path()` に合わせ、既定の設定パスを絶対化して plist に入れる（実装担当の判断）
+- 書き出し失敗時は一時 plist を消し、既存の plist を保持する（実装担当の判断）
+- `launchctl` の失敗に出力がないときは終了コードを示す（実装担当の判断）
+
