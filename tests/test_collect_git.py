@@ -139,7 +139,7 @@ def write_config(tmp_path, *repos):
     state = tmp_path / "state"
     text = f'timezone = "Asia/Tokyo"\nstate_dir = "{state}"\n'
     for repo in repos:
-        text += f'\n[[repos]]\nid = "{repo.id}"\npath = "{repo.path}"\n'
+        text += f'\n[[repos]]\nid = "{repo.id}"\npath = "{repo.path}"\norca = false\n'
     config.write_text(text, encoding="utf-8")
     return config, state
 

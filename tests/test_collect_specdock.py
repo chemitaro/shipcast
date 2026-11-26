@@ -358,4 +358,4 @@ def test_collect_repo_saves_once_and_supplies_missing_titles(commands, specdock_
 
 
 def test_specdock_is_registered_after_git():
-    assert [collector.name for collector in COLLECTORS] == ["git", "specdock"]
+    assert [collector.name for collector in COLLECTORS] == ["git", "specdock", "orca"]
