@@ -62,7 +62,9 @@ def security_headers() -> tuple[tuple[str, str], ...]:
     return (
         (
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; "
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' "
+            "https://unpkg.com/@plantuml/core@1.2026.6/ "
+            "https://unpkg.com/@highlightjs/cdn-assets@11.11.1/; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; "
             "base-uri 'none'; frame-ancestors 'none'; form-action 'none'",

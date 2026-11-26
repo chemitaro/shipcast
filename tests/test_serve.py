@@ -1,5 +1,6 @@
 import errno
 import os
+import re
 import socket
 from collections.abc import Iterator
 from http.client import HTTPConnection, HTTPResponse
@@ -55,7 +56,9 @@ def test_resolve_inside(tmp_path):
 
 EXPECTED_SECURITY_HEADERS = {
     "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; "
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' "
+        "https://unpkg.com/@plantuml/core@1.2026.6/ "
+        "https://unpkg.com/@highlightjs/cdn-assets@11.11.1/; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; "
         "base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
@@ -70,6 +73,32 @@ def test_security_headers():
     assert isinstance(headers, tuple)
     assert len(headers) == 3
     assert dict(headers) == EXPECTED_SECURITY_HEADERS
+
+
+def _script_sources() -> list[str]:
+    policy = dict(serve.security_headers())["Content-Security-Policy"]
+    for directive in policy.split(";"):
+        tokens = directive.split()
+        if tokens[:1] == ["script-src"]:
+            return tokens[1:]
+    pytest.fail("CSP has no script-src directive")
+
+
+def test_security_headers_exclude_unpkg_origin():
+    assert "https://unpkg.com" not in _script_sources()
+
+
+@pytest.mark.parametrize(
+    ("package", "version_constant"),
+    [("@plantuml/core", "PLANTUML_VERSION"), ("@highlightjs/cdn-assets", "HLJS_VERSION")],
+)
+def test_security_headers_match_design_system_versions(package, version_constant):
+    ds_js = Path(__file__).resolve().parents[1] / "spec-dock/design-system/ds.js"
+    version = re.search(
+        rf'\b{version_constant}\s*=\s*"([^"]+)"', ds_js.read_text(encoding="utf-8")
+    )
+    assert version is not None, f"{version_constant} is missing in {ds_js}"
+    assert f"https://unpkg.com/{package}@{version[1]}/" in _script_sources()
 
 
 @pytest.mark.parametrize(
