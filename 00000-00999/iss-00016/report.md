@@ -27,9 +27,9 @@ ID: "iss-00016"
 ## Outcome
 
 - S-01 — `54373b30b5038489de9d29507fbb8e28a6f7a5f9`。書き手の入力指示と応答の検査を追加。検査を JSON 全体と各フィールドに分け、エラー文には応答の値を載せない。引用内の `> ===` はレビュー時の申し送りどおり許容する。
-- 外部モデルを呼ばない作業条件に合わせ、ステージ済み差分の確認後に日本語のメッセージを手書きして通常の `git commit` を使用。
-
 - S-02 — `00d24f751d4bb54fcb766dc720aa6bf24f393b71`。4つの数、前付け・本文・拡張点の囲み、ファイルの置き換えを追加。集計は最初に現れた同一 ID を採用し、数を書き出す順は固定。文字参照には `html.escape(quote=False)` を使い、先頭の太字・インラインコードの印は申し送りどおり打ち消す。
+- S-03 — `24391b250ac4c4e865a400f428681512e9ce1901`。書き手への依頼と再試行、1日の分析・執筆・保存、CLI を接続。経路の読み取り専用属性は `Protocol` のプロパティで表現し、話題の順は `analyze` の戻り値を保つ。W-03・W-04 の1行条件は文字列の先頭・末尾の改行にも適用する。
+- 外部モデルを呼ばない作業条件に合わせ、ステージ済み差分の確認後に日本語のメッセージを手書きして通常の `git commit` を使用。
 
 ## Verification
 
@@ -40,4 +40,11 @@ ID: "iss-00016"
 - S-02 Red — `uv run pytest -q tests/test_write.py` の対象を `-k` で選択。数は `Metric` 未実装で1件、本文は `build_entry` 未実装で13件・空日1件、拡張点は登録と引数が未実装で2件、置き換えは `write_atomic` 未実装で3件失敗。
 - S-02 Green — 数1件、本文と空日14件、拡張点2件、置き換え3件が成功。`uv sync --locked`・`uv run ruff check`・`uv run pytest -q`・`git diff --cached --check` はすべて終了コード0、739 passed。コミット後の作業ツリーは clean。
 
+- S-03 Red — `uv run pytest -q tests/test_write.py` の対象を `-k` で選択。書き手への依頼は `compose`・`WriteFailed` 未実装で4件、1日の処理は `write_day` 未実装で5件、CLI は未実装の葉で7件失敗。先頭・末尾に改行を含む応答の追加2件は、それまで許容していたため失敗。
+- S-03 Green — 書き手への依頼4件、1日の処理5件、CLI の事前検査・中断を含む11件、フィールドエラー38件が成功。`uv sync --locked`・`uv run ruff check`・`uv run pytest -q`・`git diff --cached --check` はすべて終了コード0、760 passed。`uv run shipcast write --help` で2つのオプションを確認。
+- 正本 — `spec-dock scope check iss-00016` はエラー・警告とも0。計画の3つの `status` を `todo` に戻したバイト列の SHA-256 はレビュー合格時と一致。要件・設計の SHA-256 も一致し、正本は Git の差分に含まれない。
+
 ## Residual Risks / Follow-ups
+
+- D-07 に記載のとおり、ファイルの置き換え後に `Store.save_entry` が失敗すると、ファイルと記録の更新時点がずれる。同じ日の再実行で両方を書き直す。
+- 実装の検証には fake の responder を使用。実環境でのモデル実行は本人の手動検証の範囲で、レビュー・最終品質ゲート・PR はタスク担当の工程。

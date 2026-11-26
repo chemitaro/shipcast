@@ -19,7 +19,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-03": {
-		status:   "doing"
+		status:   "done"
 		title:    "書き手への依頼（`compose`）、1日の流れ（`write_day`）、CLI `shipcast write`"
 		text:     "D-02・D-07。T-09〜T-12 を先に書いて Red、`MAX_ATTEMPTS`・`WriteFailed`・`compose`・`WriteResult`・`write_day`・`configure`・`run` を書き、`cli.py` の `write` の葉に `write.configure` を渡し、`tests/test_cli.py` の未実装の一覧から `write` を外して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02", "R-03", "F-01", "F-02"]
