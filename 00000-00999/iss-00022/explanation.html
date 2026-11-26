@@ -156,6 +156,8 @@ macOS は、launchd から動くプログラムが外付けvolumeを読むこと
 Python を入れ替える（`uv` の Python を上げる）と道筋が変わるので、足し直します。手で `shipcast run` を動かすときは、ターミナルを許可します。
 :::
 
+夜の `shipcast run` が `runs` の誤りに添える直し方（iss-00021 の案内）も、同じ「`shipcast schedule install` が示す Python の実行ファイル」を指すように直します（今は「`shipcast` の実行ファイル」と書いてあり、食い違うため）。
+
 :::note 本人の確かめで確定する仮定
 `shipcast` は Python のスクリプトなので、許可は実際に動く Python の実行ファイルに付けるもの、と仮定しています。試験では確かめられないので、本人が外付けvolumeで確かめ、違えば案内を直します。
 :::
@@ -173,8 +175,8 @@ iss-00019 は、ネタポイントがしきい値に届いた日に、日誌の�
 ### S-02 install と uninstall
 CLI と `launchctl` の呼び出し、`cli.py` の接続。既定では `launchctl` を呼ばないこと、`--load`・`--unload`、入口の誤り、消すときの動きを試験します（T-04〜T-07）。
 
-### S-03 発信の芽の追随
-`journal_extensions_for` を台帳につなぎ、しきい値に届いた日の夜の日誌に印が付くことを試験します（T-08）。
+### S-03 発信の芽の追随と TCC の案内
+`journal_extensions_for` を台帳につなぎ、しきい値に届いた日の夜の日誌に印が付くことを試験します（T-08）。TCC の直し方の文を、許可する対象（Python の実行ファイル）に合わせます（T-10）。
 
 ### S-04 README
 導入・登録・外し方・ログ・フルディスクアクセスの節（T-09）。
@@ -188,7 +190,7 @@ CLI と `launchctl` の呼び出し、`cli.py` の接続。既定では `launchc
 
 - 本人の環境での登録（`install --load` の実行）と、フルディスクアクセスの付与
 - ログのファイルの回転、Linux の systemd・cron への登録
-- `shipcast run` の処理そのもの、`write`・`neta`・`config`・`state` の変更
+- `shipcast run` の処理そのもの（直すのは差し込み口と案内の文だけ）、`write`・`neta`・`config`・`state` の変更
 
 :::note 気をつけること
 - launchd の3時は Mac の時計の時刻です。設定の `timezone` が違うと「前日」がずれます。

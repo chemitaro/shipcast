@@ -11,7 +11,7 @@ steps: {
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "doing"
+		status:   "done"
 		title:    "下書きのファイル・消化（`make_x_draft`）と CLI の `draft x`"
 		text:     "D-03・D-04。T-03・T-04 を `tests/test_draft.py` に先に書いて Red、`draft.py` に `draft_path`・`render_x_draft`・`make_x_draft`・`configure_x`・`run_x` を足し、`cli.py` の配線と `tests/test_cli.py` の未実装の一覧の1行を直して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02"]

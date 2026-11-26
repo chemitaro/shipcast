@@ -104,9 +104,11 @@ design: {
 		text: """
 		`run.py` の `journal_extensions_for(store, config)` の中身を `return journal_extensions(store, config.neta.threshold)` にし、戻り値の型を `Sequence[JournalExtension]` にする（import は `from shipcast.write import ... journal_extensions`）。docstring の「後続の変更で行う」を、台帳の印を渡すことの説明に直す。ほかの `run.py` の処理は変えない。
 
+		あわせて `_TCC_HINT` の括弧の中を「launchd から動かすときは `shipcast schedule install` が示す Python の実行ファイル、手で動かすときはターミナル」にし、文の最後に「（README の「導入と毎晩の実行」の節）」を足す。`TCC_MARKER` と `with_tcc_hint` の条件は変えない。
+
 		`tests/test_run.py` の既存の試験で `extensions_passed == [None] * ...` を確かめている行は、渡された組の最後が `NetaSprout` で、その前が `write.EXTENSIONS` と同じことの確かめに直す（`NetaSprout` は等しさを持たないので、`==` で組を比べない）。
 		"""
-		satisfies: ["R-04"]
+		satisfies: ["R-04", "R-05"]
 	}
 	"D-08": {
 		title: "README の節"
@@ -114,12 +116,12 @@ design: {
 		`README.md` の「## 置き場の原則」の後、「## 日誌を読む（`shipcast serve`）」の前に、「## 導入と毎晩の実行（`shipcast schedule`）」を置く（並行の Issue が「## License」の前に節を足しても衝突しにくい位置）。内容：
 
 		1. 導入：`uv tool install git+https://github.com/chemitaro/shipcast`（手元の checkout からなら、main の checkout で `uv tool install .`）、`uv tool update-shell`、更新は `uv tool upgrade shipcast`。worktree や `uv run` の `shipcast` は登録しないこと
-		2. 登録：`shipcast schedule install`、表示された `launchctl bootstrap gui/<uid> ...` を打つか、`shipcast schedule install --load`。毎日 03:00（Mac の時計）に `shipcast run` が前日の日誌を作る。`PATH` を変えたら登録をやり直す
+		2. 登録：`shipcast schedule install`、表示された `launchctl bootstrap gui/<uid> ...` を打つか、`shipcast schedule install --load`。毎日 03:00（Mac の時計の時刻）に `shipcast run` が、設定の `timezone` での前日の日誌を作る（Mac の時計と `timezone` が違うと、前日の境目がずれる）。`PATH` を変えたら登録をやり直す
 		3. ログ：`<state_dir>/logs/nightly.out.log`・`nightly.err.log`（既定 `~/.local/state/shipcast/logs/`）と、実行の記録（`runs`）
 		4. 外し方：`shipcast schedule uninstall`（と `--unload`、または表示された `launchctl bootout ...`）
 		5. フルディスクアクセス：外付けvolumeのrepositoryを読むとき、「システム設定」→「プライバシーとセキュリティ」→「フルディスクアクセス」で、`install` が示す Python の実行ファイルを足す（追加の画面で `Cmd+Shift+G` で道筋を入れる）。Python を入れ替えたら足し直す。手で `shipcast run` を動かすときはターミナルを許可する
 
-		`tests/test_readme.py` に、この節が「## 日誌を読む」の前にあり、`uv tool install`・`shipcast schedule install`・`--load`・`shipcast schedule uninstall`・`logs/`・`フルディスクアクセス` を含むことの試験を足す。
+		`tests/test_readme.py` に、この節が「## 日誌を読む」の前にあり、`uv tool install`・`shipcast schedule install`・`--load`・`shipcast schedule uninstall`・`logs/`・`フルディスクアクセス`・`timezone` を含むことの試験を足す。
 		"""
 		satisfies: ["R-03"]
 	}

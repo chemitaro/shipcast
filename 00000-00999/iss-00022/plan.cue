@@ -20,9 +20,9 @@ steps: {
 	}
 	"S-03": {
 		status:   "todo"
-		title:    "`shipcast run` の拡張点を台帳につなぐ（`journal_extensions_for`）"
-		text:     "D-07。T-08 を先に書いて Red（今の `None` では落ちる）、`journal_extensions_for` を `journal_extensions(store, config.neta.threshold)` にし、既存の `tests/test_run.py` の `[None]` の確かめを直して Green。完了の条件：`test_commands` がすべて終了コード0。"
-		realizes: ["R-04"]
+		title:    "`shipcast run` の拡張点を台帳につなぎ、TCC の案内の対象を合わせる（`journal_extensions_for`・`_TCC_HINT`）"
+		text:     "D-07。T-08・T-10 を先に書いて Red（今の `None` では落ちる）、`journal_extensions_for` を `journal_extensions(store, config.neta.threshold)` にし、`_TCC_HINT` の文を直し、既存の `tests/test_run.py` の `[None]` の確かめを直して Green。完了の条件：`test_commands` がすべて終了コード0。"
+		realizes: ["R-04", "R-05"]
 		after:    ["S-02"]
 		session:  "impl"
 	}
@@ -45,7 +45,8 @@ tests: {
 	"T-06": {title: "`install` の入口の誤り：`which` が `None`、`.venv` の道筋、設定が読めない（`SHIPCAST_CONFIG` が無いファイル）のどれでも、終了コード1、標準エラーに `shipcast schedule install:` と直し方、`tmp_path/home/Library` も `<state_dir>/logs` もできない。`HOME/Library/LaunchAgents` がファイルのときは、終了コード1で `書き出せません`、traceback がない", verifies: ["F-01", "F-02"]}
 	"T-07": {title: "`uninstall`：plist があると、終了コード0、ファイルが消え、標準出力に `plist を消しました:` と `launchctl bootout gui/501/com.shipcast.nightly`、`launchctl` の偽物は呼ばれない。もう一度実行すると0で `登録はありません:`。`--unload` では、`launchctl` の偽物が `(\"bootout\", \"gui/501/com.shipcast.nightly\")` で1回呼ばれ、0なら `外しました:`、1（`Boot-out failed: 3: No such process`）なら標準エラーに `警告: 外せませんでした` が出て、どちらも plist が消えて終了コード0。plist の道筋がディレクトリのときは終了コード1で `plist を消せません`。`shipcast schedule uninstall --help` に `--unload` がある。`tests/test_cli.py` の未実装の一覧に `schedule` の葉がない", verifies: ["R-02", "F-02"]}
 	"T-08": {title: "`shipcast run` の拡張点：既存の `run_cli` の fixture で、`write_day` を包む偽物が受け取る `extensions` が、どのrepositoryでも、最後が `NetaSprout`、その前が `write.EXTENSIONS` と同じ（`monkeypatch.setattr(write, \"EXTENSIONS\", (偽の拡張点,))` で確かめる）。fake の分析の返事で話題のネタの点を上げ（`tests/test_write.py` の `test_write_cli_appends_sprout_only_on_active_day_at_threshold` と同じ作り）、設定の `[neta] threshold` をそのrepositoryのネタポイントの合計以下にして `main([\"run\", \"--repo\", <id>, \"--date\", <日>])` が0のとき、その日誌の本文に `:::tip 発信の芽（ネタポイント <合計>）` の囲みがある。しきい値を合計より1大きくして同じ日を実行し直すと、囲みがない", verifies: ["R-04"]}
-	"T-09": {title: "README：「## 導入と毎晩の実行（`shipcast schedule`）」の節が「## 日誌を読む（`shipcast serve`）」の前にあり、`uv tool install`、`shipcast schedule install`、`--load`、`shipcast schedule uninstall`、`logs/`、`フルディスクアクセス` を含む", verifies: ["R-03"]}
+	"T-09": {title: "README：「## 導入と毎晩の実行（`shipcast schedule`）」の節が「## 日誌を読む（`shipcast serve`）」の前にあり、`uv tool install`、`shipcast schedule install`、`--load`、`shipcast schedule uninstall`、`logs/`、`フルディスクアクセス`、`timezone` を含む", verifies: ["R-03"]}
+	"T-10": {title: "TCC の案内：`run.with_tcc_hint(\"x: Operation not permitted\")` の結果が `フルディスクアクセス`・`shipcast schedule install`・`Python` を含み、`shipcast` の実行ファイルを許可する旧い文（「launchd から動かすときは `shipcast` の実行ファイル」）を含まない。`Operation not permitted` を含まない文はそのまま返す（既存の TCC の試験はそのまま通る）", verifies: ["R-05"]}
 }
 
 verification: "`test_commands` を順に流し、すべて終了コード0。試験は一時のディレクトリ（`HOME` の差し替え）、`shutil.which`・`launchctl`・`subprocess.run` の偽物、fake の経路の `responder` だけで、本物の `~/Library/LaunchAgents/`・`launchctl`・外部のモデル・`agy` に触れない。PRを作った後に、GitHub ActionsのCIの合格を `github-pr-checks` で観測する。本物の launchd での読み込み、3時の起動、外付けvolumeでのフルディスクアクセスは、本人の手動の確かめだけ。"

@@ -27,7 +27,7 @@ launchd は、ユーザーのエージェント（`~/Library/LaunchAgents/` の 
 includes: [
 	"`src/shipcast/schedule.py`（新しいmodule）：plist の組み立て、`shipcast` の実行ファイルの見つけ方、`install`・`uninstall` のCLI（`configure_install`・`configure_uninstall`）、`launchctl` の呼び出し（`--load`・`--unload` のときだけ）",
 	"`src/shipcast/cli.py`：`schedule` の `install`・`uninstall` の葉を `shipcast.schedule` につなぐ（ほかの葉は変えない）",
-	"`src/shipcast/run.py`：`journal_extensions_for` の中身を `write.journal_extensions(store, config.neta.threshold)` にする（iss-00019・iss-00021 からの追随）",
+	"`src/shipcast/run.py`：TCC の案内の文（`_TCC_HINT`）の許可する対象を、`install` と README の案内に合わせる（R-05）。`journal_extensions_for` の中身を `write.journal_extensions(store, config.neta.threshold)` にする（iss-00019・iss-00021 からの追随）",
 	"`README.md`：導入（`uv tool install`）、登録、外し方、外付けvolumeのときのフルディスクアクセスの付け方の節",
 	"`tests/test_schedule.py`（新しい試験）、`tests/test_run.py` の拡張点の確かめの更新と「発信の芽」の試験、`tests/test_cli.py` の未実装の一覧から `schedule` の2件を外す、`tests/test_readme.py` に節の確かめ",
 ]
@@ -38,7 +38,7 @@ excludes: [
 	"macOS のフルディスクアクセスを自動で付けること。手順を README と出力に示すだけ",
 	"ログのファイルの回転・削除",
 	"Linux の systemd・cron への登録（対象は macOS の launchd だけ）",
-	"`shipcast run` の処理（収集・執筆・lock・TCC の見分け）、`shipcast.write`・`shipcast.neta`・`shipcast.config`・`shipcast.state` の変更",
+	"`shipcast run` の処理（収集・執筆・lock・TCC の見分けの仕組み。案内の文の対象の書き換えだけは R-05 で行う）、`shipcast.write`・`shipcast.neta`・`shipcast.config`・`shipcast.state` の変更",
 	"README の「状態」の節など、このIssueの節の外の書き換え",
 ]
 
@@ -82,11 +82,18 @@ requirements: {
 			"fake の経路で、ネタポイントがしきい値に届いた日の `shipcast run` の日誌に `:::tip 発信の芽（ネタポイント <n>）` の囲みが入り、届かない日には入らない",
 		]
 	}
+	"R-05": {
+		title: "夜の実行の記録に添える TCC の直し方が、`install` の出力・README の案内と同じ対象を指す"
+		acceptance: [
+			"`shipcast run` が TCC の失敗に添える直し方（`run.with_tcc_hint` の案内）が、launchd から動かすときに許可する対象を `shipcast schedule install` が示す Python の実行ファイルとし、README の節を指す。手で動かすときはターミナルのまま",
+			"案内を足す条件（`Operation not permitted` を含むときだけ）は変わらない",
+		]
+	}
 }
 
 failures: {
 	"F-01": {
-		title:  "`shipcast` の実行ファイルが `uv tool install` のものでないときは、登録しない"
+		title:  "`shipcast` の実行ファイルが PATH にないとき、checkout の `.venv` の下のときは、登録しない"
 		text:   "`PATH` から `shipcast` が見つからないとき、または見つかった道筋（とその実体）が `.venv` の下（worktree や checkout の `uv run`）のときは、plist を書かず、`uv tool install` の直し方を標準エラーに出して終了コード1。"
 		impact: "checkout の `.venv` の `shipcast` を登録すると、branch の切り替えや worktree の削除で、夜の実行が知らないうちに別のコードで動くか、動かなくなる（epic-00007 の D-03）"
 	}
