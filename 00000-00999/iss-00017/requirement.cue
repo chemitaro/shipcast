@@ -50,6 +50,7 @@ decisions: [
 	"タスク担当の判断（2026-11-26、試作の結果による）：CSPの `script-src` に `'wasm-unsafe-eval'` を足す。`'unsafe-eval'` と `'unsafe-inline'` はscriptに許さない",
 	"タスク担当の判断（2026-11-26、試作の結果による）：`<!--` は置き換えず、包む本文の末尾に閉じのコメント `<!-- -->` を足して、`<script>` の終わりを守る（親の F-03 の置き換えの方法を改める。守る目的は同じ）",
 	"タスク担当の判断（2026-11-26）：DNSの付け替え（DNS rebinding）で外のWebページから手元の配信を読まれないよう、Hostのヘッダーを確かめる（F-05）",
+	"タスク担当の判断（2026-11-26、最終品質ゲートの ChatGPT の P1 をブラウザーで再現して採用）：CSPの `script-src` は unpkg.com のオリジン全体ではなく、ds.js が読む決まった版の2つの道筋だけを許す（F-04、D-04）。本文の生のHTMLの `<meta name=\"ds-vendor-base\">` で部品の読み込み先を差し替えられるため",
 ]
 
 requirements: {
@@ -107,8 +108,8 @@ failures: {
 	}
 	"F-04": {
 		title:    "日誌の本文に混ざった生のHTMLのscriptやイベントの属性は動かない"
-		text:     "デザインシステムのMarkdownは生のHTMLをそのまま描くので、応答のヘッダーで防ぐ。"
-		impact:   "`<img onerror=…>` などがページの中で動き、同じ配信のほかの日誌を読まれうる"
+		text:     "デザインシステムのMarkdownは生のHTMLをそのまま描くので、応答のヘッダーで防ぐ。本文の生のHTMLが部品の読み込み先（`<meta name=\"ds-vendor-base\">`）を差し替えても、許した版の道筋の外のscriptは読まない。"
+		impact:   "`<img onerror=…>` や、差し替えた読み込み先の第三者のscriptがページの中で動き、同じ配信のほかの日誌を読まれうる"
 		recovery: "すべての応答（404・405・400・500を含む）に D-04 のCSP・`X-Content-Type-Options: nosniff`・`Referrer-Policy: no-referrer` を付ける（インラインのscriptとイベントの属性を止め、URLやtailnetの名前をCDNへ送らない）。デザインシステムの描画がこの方針で動くことを、実際のブラウザーで確かめる。描けないときは、要る最小の許可だけを足し、`'unsafe-inline'`・`'unsafe-eval'` をscriptに許さず、理由を報告に記録する"
 	}
 	"F-05": {

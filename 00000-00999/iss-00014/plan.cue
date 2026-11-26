@@ -40,7 +40,7 @@ steps: {
 		realizes: ["R-02", "F-06"]
 		after:    ["S-04"]
 		session:  "impl"
-		status:   "todo"
+		status:   "doing"
 	}
 }
 

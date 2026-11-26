@@ -89,14 +89,15 @@ design: {
 		`security_headers() -> tuple[tuple[str, str], ...]` は次の3つを返す。
 
 		```text
-		Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
+		Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com/@plantuml/core@1.2026.6/ https://unpkg.com/@highlightjs/cdn-assets@11.11.1/; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 		X-Content-Type-Options: nosniff
 		Referrer-Policy: no-referrer
 		```
 
 		- 親の D-05 からの変更：`'wasm-unsafe-eval'`（PlantUMLのWebAssemblyに要る。試作で確かめた）、`form-action 'none'`（本文に混ざった `<form>` で外へ送らせない。デザインシステムはformを使わない）、`Referrer-Policy: no-referrer`（日誌のURLとtailnetの名前をunpkg.com・Googleのフォントへ送らない）。
 		- `style-src 'unsafe-inline'` は、ds.js が部品に `style` の属性を書くので要る。scriptには `'unsafe-inline'`・`'unsafe-eval'` を許さない。
-		- `https://unpkg.com` は、ds.js が決まった版のPlantUMLとhighlight.jsを読むのに要る。本文の生のHTMLが `<script src=…>` を足しても、`innerHTML` で入れたscriptは動かない。
+		- unpkg.com は、ds.js が決まった版のPlantUML（`@plantuml/core@1.2026.6`）とhighlight.js（`@highlightjs/cdn-assets@11.11.1`）を読む **2つの道筋だけ** を許す（末尾の `/` で、その下だけに当たる）。unpkg.com のオリジン全体は許さない。理由（最終品質ゲートの ChatGPT の P1、2026-11-26、ブラウザーで再現）：ds.js は本文を文書に入れた後に `document.querySelector('meta[name="ds-vendor-base"]')` で部品の読み込み先を決めるので、本文の生のHTMLの `<meta name="ds-vendor-base" content="https://unpkg.com/<誰かのパッケージ>/">` で、第三者が unpkg に置いたscriptを日誌の生まれで動かせる。道筋を絞ると、差し替えた先はCSPで拒まれ、ds.js は次の候補（決まった版のCDN）から読む。版の値は ds.js の `PLANTUML_VERSION`・`HLJS_VERSION` と同じにし、試験でそろっていることを確かめる。
+		- 本文の生のHTMLが `<script src=…>` を足しても、`innerHTML` で入れたscriptは動かない。同じ生まれの道筋をscriptとして読ませても、日誌のページと案内は `text/html` で `nosniff` なので動かない。
 		- 配信のハンドラーは `end_headers()` を上書きし、`security_headers()` を送ってから親の `end_headers()` を呼ぶ。`send_error`（400・404・405・501など標準ライブラリが返すものを含む）もここを通るので、すべての応答に付く。`server_version = "shipcast"`、`sys_version = ""` で、Pythonの版を `Server` に出さない。
 		"""
 		satisfies: ["F-04"]
@@ -164,7 +165,7 @@ compatibility: "既存のコマンドと設定の形は変えない。`cli.py` �
 
 risks: [
 	"デザインシステムが将来インラインのscript・別のCDN・別のWebAssemblyの読み方を使うと、D-04 の方針で描けなくなる。T-07 のブラウザーでの確かめで気づき、最小の許可を足す",
-	"`https://unpkg.com` 全体をscriptに許すので、本文の生のHTMLからscriptを読ませる別の道（`innerHTML` を通らないもの）が将来できると、unpkgのパッケージが動きうる。今のds.jsでは道がない",
+	"CSPの unpkg.com の道筋は ds.js の部品の版に結び付く。デザインシステムが部品の版を上げると図と色分けが描けなくなる（本文は描ける）。試験で ds.js の版とCSPの道筋がそろっていることを確かめ、上げるときは同じ変更でCSPを直す",
 	"Hostの検査は、`.ts.net` でない独自の名前（自分のドメインなど）で読む使い方を拒む。必要になったら許す名前を設定に足す（別のIssue）",
 	"本文が閉じていないコードの囲みで終わる日誌では、末尾の `<!-- -->` がコードの中に見える",
 ]
