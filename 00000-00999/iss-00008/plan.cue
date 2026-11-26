@@ -8,6 +8,7 @@ steps: {
 		text:     "D-01。`uv init --package --build-backend uv` 相当の形、`uv add --dev pytest ruff`、ruffとpytestの設定、`uv.lock`。完了の条件：新しいcloneで `uv sync --locked` と `uv run ruff check` と `uv run pytest -q` が通る（この時点の試験は、packageが読み込めることの1件でよい）。"
 		realizes: ["R-02"]
 		session:  "impl"
+		status:   "done"
 	}
 	"S-02": {
 		title:    "CLIの入口と下位のコマンドの表"
@@ -15,6 +16,7 @@ steps: {
 		realizes: ["R-01", "F-01", "F-02"]
 		after: ["S-01"]
 		session: "impl"
+		status:  "done"
 	}
 	"S-03": {
 		title:    "CIのworkflow"
@@ -22,6 +24,7 @@ steps: {
 		realizes: ["R-04"]
 		after: ["S-02"]
 		session: "impl"
+		status:  "done"
 	}
 	"S-04": {
 		title:    "`AGENTS.md` の「Gitと検証」に検証のcommandを書く"
@@ -29,6 +32,7 @@ steps: {
 		realizes: ["R-03"]
 		after: ["S-03"]
 		session: "owner"
+		status:  "done"
 	}
 }
 
