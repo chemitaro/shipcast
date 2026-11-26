@@ -17,15 +17,16 @@ from shipcast.config import Config, ConfigError, RepoConfig, load_config
 from shipcast.model import JournalFormatError
 from shipcast.models import GuardedRoute, RouteError, get_route
 from shipcast.state import Run, StateError, Store
-from shipcast.write import JournalExtension, WriteFailed, write_day
+from shipcast.write import JournalExtension, WriteFailed, journal_extensions, write_day
 
 LOCK_FILENAME = "run.lock"
 TCC_MARKER = "Operation not permitted"
 _TCC_HINT = (
     "直し方: macOS の「システム設定」→「プライバシーとセキュリティ」"
     "→「フルディスクアクセス」で、shipcast を動かすプログラム"
-    "（launchd から動かすときは `shipcast` の実行ファイル、"
+    "（launchd から動かすときは `shipcast schedule install` が示す Python の実行ファイル、"
     "手で動かすときはターミナル）を許可してください"
+    "（README の「導入と毎晩の実行」の節）"
 )
 
 
@@ -71,9 +72,9 @@ def previous_day(tz: ZoneInfo, now: datetime | None = None) -> date:
     return (now or datetime.now(tz)).astimezone(tz).date() - timedelta(days=1)
 
 
-def journal_extensions_for(store: Store, config: Config) -> Sequence[JournalExtension] | None:
-    """日誌の拡張点を渡す場所。台帳との接続は後続の変更で行う。"""
-    return None
+def journal_extensions_for(store: Store, config: Config) -> Sequence[JournalExtension]:
+    """ネタポイント台帳に基づく「発信の芽」を日誌の拡張点に加える。"""
+    return journal_extensions(store, config.neta.threshold)
 
 
 def configure(parser: argparse.ArgumentParser) -> None:
