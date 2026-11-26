@@ -4,14 +4,14 @@ goal: "先に下書きの中身（Xの長さ、応答の検査、書き手への
 
 steps: {
 	"S-01": {
-		status:   "todo"
+		status:   "done"
 		title:    "Xの長さ・応答の検査・書き手への依頼と `prompts/x.md`"
 		text:     "D-01・D-02。T-01・T-02 を新しい `tests/test_draft.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/draft.py`（`X_LIMIT`・`XDraft`・`x_length`・`parse_x_draft`・`XDraftFailed`・`compose_x`）と `src/shipcast/prompts/x.md` を書いて通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01"]
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "todo"
+		status:   "doing"
 		title:    "下書きのファイル・消化（`make_x_draft`）と CLI の `draft x`"
 		text:     "D-03・D-04。T-03・T-04 を `tests/test_draft.py` に先に書いて Red、`draft.py` に `draft_path`・`render_x_draft`・`make_x_draft`・`configure_x`・`run_x` を足し、`cli.py` の配線と `tests/test_cli.py` の未実装の一覧の1行を直して Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02"]
