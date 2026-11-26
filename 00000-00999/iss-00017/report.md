@@ -30,6 +30,18 @@ ID: "iss-00017"
   - P3：標準の `ThreadingHTTPServer` はIPv6で立たない。申し送り（S-03）：`host` に `:` を含むときは `AF_INET6` のサーバーで立てる
   - P3：親 epic-00005 の F-03・D-01・D-05 が `<!--` の置き換えのまま。統括へ申し送る（親の文書は統括の範囲）
 
+### 仕様のレビュー round 2（2026-11-26、仕様の変更）
+
+- 理由：最終品質ゲート attempt 02 の ChatGPT の P1（本文の生のHTMLの `<meta name="ds-vendor-base">` で部品の読み込み先を差し替えられ、CSP が unpkg.com のオリジン全体を許していた）。ヘッドレスの Chrome で、差し替えた先の要求が CSP に止められないことを再現した（`.workbench/coding-task/iss-00017/t07/probe-before.json`）
+- 変更：D-04 の CSP の `script-src` を ds.js が読む2つの版の道筋（`https://unpkg.com/@plantuml/core@1.2026.6/`、`https://unpkg.com/@highlightjs/cdn-assets@11.11.1/`）に絞る。F-04 の text・impact、requirement の decisions、design の risks、plan の T-05・T-07。手順と割り当ては変えない
+- 結果：Claude `spec-reviewer`（同じレビュアー、Opus 5.5 / high）**合格**（P0 0件、P1 0件、P2 4件、P3 2件）。`.workbench/spec-review/iss-00017/round-2.json`、`round-2.check.json`（exit 0）
+- 固定した文書（sha256）：
+  - `requirement.cue`：`02354bd8ba0b35bbdc6951d576025911cab926ff7f5dd1ca3fac8b3901dde69e`
+  - `design.cue`：`8ed402bcda10b7389433214e2b93e4f2ac0afedf83bc406c9e1c6c381cb2a4e6`
+  - `plan.cue`：`54627513abf32abaf598344c842b8922b4f169e77c9edeed406918a36906de2f`
+- 新しい P2（情報）：配信する ds.js は登録した repository（または `design_system_dir`）のもので、T-05 はこの repository の ds.js の版とだけ比べる。本人の repository の SpecDock が部品の版を上げると、図と色分けが描けなくなる（本文は描ける）。残りのリスクに記録
+- ほかの P2/P3 は round 1 と同じ（申し送り済み）
+
 ### 区切りのレビュー CP-1（2026-11-26）
 
 - 結果：**合格**（round 1。規約の観点 P0〜P3 0件、仕様の観点 P0〜P3 0件）
