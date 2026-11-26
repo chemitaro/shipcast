@@ -9,6 +9,7 @@ tests: {
 	"T-01": {title: "一時のGitのrepositoryで、その日のcommitとmergeだけが集まる", verifies: ["R-02"]}
 	"T-02": {title: "collect の実行で、Eventが状態に保存される", verifies: ["R-01"]}
 	"T-03": {title: "Gitでないpathで失敗として記録される", verifies: ["F-01"]}
+	"T-04": {title: "収集の前後で、対象のrepositoryの HEAD と index が変わらない", verifies: ["R-03"]}
 }
 
 execution: sessions: {

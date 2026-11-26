@@ -9,6 +9,8 @@ tests: {
 	"T-01": {title: "見本の設定を読み、既定値が補われる", verifies: ["R-01"]}
 	"T-02": {title: "SpecDockのないrepositoryは足さない・同じidは二重にしない", verifies: ["R-02"]}
 	"T-03": {title: "壊れた設定で、直し方を示して止まる", verifies: ["F-01"]}
+	"T-04": {title: "`repo list` が登録した順に示す", verifies: ["R-03"]}
+	"T-05": {title: "設定ファイルがないとき、作ってから足す", verifies: ["R-04"]}
 }
 
 execution: sessions: {

@@ -1,13 +1,14 @@
 package spec
 
 steps: {
-	"S-01": {title: "実際の `scope list --json` と `todo list --json` の出力を確かめ、見本として tests/fixtures に置く", realizes: ["R-03"], session: "impl"}
-	"S-02": {title: "SpecDockのcollector", realizes: ["R-01", "R-02"], after: ["S-01"], session: "impl"}
+	"S-01": {title: "実際の3つのコマンドの出力を確かめ、架空の値に置き換えた見本を tests/fixtures に置く", realizes: ["R-03"], session: "impl"}
+	"S-02": {title: "SpecDockのcollector", realizes: ["R-01", "R-02", "F-01"], after: ["S-01"], session: "impl"}
 }
 
 tests: {
 	"T-01": {title: "見本の出力から、その日のScopeの作成と終了がEventになる", verifies: ["R-01"]}
 	"T-02": {title: "見本の出力から、todoがEventになる", verifies: ["R-02"]}
+	"T-03": {title: "`gh` が失敗するとき、警告を残してtodoだけを集める", verifies: ["F-01"]}
 }
 
 execution: sessions: {
