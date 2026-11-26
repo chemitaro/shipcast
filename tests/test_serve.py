@@ -3,6 +3,7 @@ import os
 import re
 import socket
 from collections.abc import Iterator
+from datetime import date
 from http.client import HTTPConnection, HTTPResponse
 from pathlib import Path
 from threading import Thread
@@ -19,7 +20,10 @@ from shipcast.config import load_config
     ("target", "expected"),
     [
         ("/", ()),
-        ("/demo-app/", None),
+        ("/demo-app/", ("demo-app", "")),
+        ("/_ds/vendor/", ("_ds", "vendor", "")),
+        ("/demo-app//", None),
+        ("/a//b", None),
         ("/demo-app/2026-11-26?query#fragment", ("demo-app", "2026-11-26")),
         ("/_ds/%E3%81%82.css", ("_ds", "あ.css")),
         ("/_ds/%252e.css", ("_ds", "%2e.css")),
@@ -229,7 +233,9 @@ def test_design_system_asset(address, design_dir, relative, content_type):
     assert body == path.read_bytes()
 
 
-@pytest.mark.parametrize("target", [JOURNAL_URL, "/_ds/ds.css", "/missing"])
+@pytest.mark.parametrize(
+    "target", [JOURNAL_URL, "/_ds/ds.css", "/missing/", "/", "/demo-app/", "/demo-app"]
+)
 def test_head_matches_get(address, target):
     status, headers, body = request(address, "GET", target)
     head_status, head_headers, head_body = request(address, "HEAD", target)
@@ -307,7 +313,10 @@ def test_method_not_allowed(address, method):
     [
         ("GET", JOURNAL_URL, "localhost", 200),
         ("GET", "/_ds/ds.css", "localhost", 200),
-        ("GET", "/missing", "localhost", 404),
+        ("GET", "/missing/", "localhost", 404),
+        ("GET", "/", "localhost", 200),
+        ("GET", "/demo-app/", "localhost", 200),
+        ("GET", "/demo-app", "localhost", 301),
         ("POST", JOURNAL_URL, "localhost", 405),
         ("GET", JOURNAL_URL, "evil.example", 400),
         ("GET", "/demo-app/2026-11-25", "localhost", 500),
@@ -345,9 +354,13 @@ def test_ipv6_server(journal_dir, design_dir):
 @pytest.mark.parametrize(
     "target",
     [
-        "/",
-        "/demo-app/",
         "/demo-app/2026-11-25",
+        "/nothing/",
+        "/Demo/",
+        "/demo-app/2026-11-26/",
+        "/demo-app//",
+        "/_ds/",
+        "/_ds/vendor/",
         "/Demo/2026-11-26",
         "/demo-app/2026-02-30",
         "/demo-app/20261126",
@@ -381,8 +394,8 @@ def test_missing_or_invalid_path_returns_generic_notice(address, journal_dir, de
     assert b'id="ds-source"' in body
     assert "ページが見つかりません".encode() in body
     assert str(journal_dir).encode() not in body
-    # Both strings also occur in the notice's fixed example URL.
-    if target not in {"/", "/demo-app/"}:
+    # The page itself links to /_ds/ds.css and /_ds/ds.js.
+    if target != "/_ds/":
         assert target.encode() not in body
     assert b"outside marker" not in body
 
@@ -530,7 +543,7 @@ def test_serve_starts_and_closes_on_interrupt(
     assert main(["serve", *options]) == 0
     assert calls == [(host, port, journal, design_dir.resolve()), "serve", "closed"]
     captured = capsys.readouterr()
-    assert f"http://{url_authority}/<repo>/<YYYY-MM-DD>" in captured.out
+    assert f"http://{url_authority}/ で日誌を読めます" in captured.out
     assert str(journal) in captured.out
     assert str(design_dir.resolve()) in captured.out
     assert "Ctrl+C" in captured.out
@@ -561,3 +574,181 @@ def test_serve_diagnoses_occupied_port(config_file, design_dir, capsys):
     assert captured.out == ""
     assert f"127.0.0.1:{port} で待ち受けられません" in captured.err
     assert os.strerror(errno.EADDRINUSE) in captured.err
+
+
+def write_journal(root: Path, repo: str, day: str, *, title: str = "", lead: str = "") -> Path:
+    path = root / repo / day[:4] / f"{day}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        f"---\ntitle: {title or f'見本の題名 {day}'}\nlead: {lead or f'見本の要約 {day}'}\n"
+        f"date: {day}\nrepo: {repo}\n---\n\n本文\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def library(tmp_path) -> Path:
+    """A fictional journal directory with two repositories and the edge cases of F-01/F-02."""
+    root = tmp_path / "library"
+    write_journal(root, "demo-app", "2026-11-27")
+    write_journal(root, "demo-app", "2026-11-26").write_bytes(b"broken frontmatter")
+    write_journal(root, "demo-app", "2026-10-31")
+    write_journal(root, "sample-lib", "2026-11-20")
+    write_journal(root, "sample-lib", "2026-11-28").write_bytes(b"\xff")
+    write_journal(root, "broken-only", "2026-11-01").write_bytes(b"broken frontmatter")
+    (root / "empty-repo").mkdir()
+    write_journal(root, "Demo", "2026-11-29")
+    write_journal(root, ".hidden", "2026-11-29")
+    (root / "notes.txt").write_text("not a repository", encoding="utf-8")
+    (root / "demo-app/2026/2026-02-30.md").write_text("x", encoding="utf-8")
+    (root / "demo-app/2026/.2026-11-01.md").write_text("x", encoding="utf-8")
+    (root / "demo-app/2026/notes.txt").write_text("x", encoding="utf-8")
+    (root / "demo-app/2025").mkdir()
+    (root / "demo-app/2025/2026-01-01.md").write_text("x", encoding="utf-8")
+    (root / "demo-app/files").mkdir()
+    outside = tmp_path / "outside"
+    write_journal(outside, "secret-repo", "2026-11-29", title="outside marker")
+    write_journal(outside, "secret-repo", "2027-01-01", title="outside marker")
+    (root / "linked-repo").symlink_to(outside / "secret-repo", target_is_directory=True)
+    (root / "demo-app/2027").symlink_to(outside / "secret-repo/2027", target_is_directory=True)
+    (root / "demo-app/2026/2026-11-30.md").symlink_to(outside / "secret-repo/2026/2026-11-29.md")
+    return root
+
+
+def test_journal_repos_lists_repository_directories_by_name(library):
+    assert serve.journal_repos(library) == ["broken-only", "demo-app", "empty-repo", "sample-lib"]
+    assert serve.journal_repos(library / "missing") == []
+
+
+def test_journal_files_lists_valid_days_newest_first(library):
+    assert serve.journal_files(library, "demo-app") == [
+        (date(2026, 11, 27), library / "demo-app/2026/2026-11-27.md"),
+        (date(2026, 11, 26), library / "demo-app/2026/2026-11-26.md"),
+        (date(2026, 10, 31), library / "demo-app/2026/2026-10-31.md"),
+    ]
+    assert serve.journal_files(library, "linked-repo") == []
+    assert serve.journal_files(library, "missing") == []
+
+
+def test_journal_days_reads_front_matter_and_reports_broken_days(library):
+    errors = []
+
+    days = serve.journal_days(library, "demo-app", lambda path, error: errors.append(path))
+
+    assert [(entry.repo, entry.day) for entry in days] == [
+        ("demo-app", date(2026, 11, 27)),
+        ("demo-app", date(2026, 11, 26)),
+        ("demo-app", date(2026, 10, 31)),
+    ]
+    assert days[0].meta.title == "見本の題名 2026-11-27"
+    assert days[1].meta is None
+    assert errors == [library / "demo-app/2026/2026-11-26.md"]
+
+
+def test_latest_journals_skips_unreadable_days(library):
+    errors = []
+
+    latest = serve.latest_journals(library, lambda path, error: errors.append(path))
+
+    assert [(entry.repo, entry.day.isoformat()) for entry in latest] == [
+        ("demo-app", "2026-11-27"),
+        ("sample-lib", "2026-11-20"),
+    ]
+    assert all(entry.meta is not None for entry in latest)
+    assert sorted(errors) == [
+        library / "broken-only/2026/2026-11-01.md",
+        library / "sample-lib/2026/2026-11-28.md",
+    ]
+    assert serve.latest_journals(library / "missing", lambda path, error: None) == []
+
+
+@pytest.fixture
+def library_address(library, design_dir) -> Iterator[tuple[str, int]]:
+    with serve.create_server("127.0.0.1", 0, library, design_dir) as server:
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+        thread.start()
+        try:
+            yield server.server_address
+        finally:
+            server.shutdown()
+            thread.join()
+
+
+def page_source(body: bytes) -> str:
+    document = html5lib.parse(body.decode(), namespaceHTMLElements=False)
+    [source] = document.findall(".//script[@id='ds-source']")
+    return source.text
+
+
+def test_cover_lists_the_latest_journal_of_each_repository(library_address, library, capsys):
+    status, headers, body = request(library_address, "GET", "/")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/html; charset=utf-8"
+    assert {name: headers.get(name) for name in EXPECTED_SECURITY_HEADERS} == (
+        EXPECTED_SECURITY_HEADERS
+    )
+    source = page_source(body)
+    assert ":::cards" in source
+    cards = [line for line in source.split("\n") if "more=この日を読む}" in line]
+    assert [line.split("{href=")[1].split(" ")[0] for line in cards] == [
+        "/demo-app/2026-11-27",
+        "/sample-lib/2026-11-20",
+    ]
+    assert "- [empty-repo](/empty-repo/)" in source
+    assert b"outside marker" not in body
+    assert str(library).encode() not in body
+    assert "sample-lib/2026/2026-11-28.md" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("make_root", [lambda root: root.mkdir(), lambda root: None])
+def test_cover_without_journals_explains_how_they_are_made(tmp_path, design_dir, make_root):
+    root = tmp_path / "empty"
+    make_root(root)
+    with serve.create_server("127.0.0.1", 0, root, design_dir) as server:
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.01})
+        thread.start()
+        try:
+            status, _, body = request(server.server_address, "GET", "/")
+        finally:
+            server.shutdown()
+            thread.join()
+
+    assert status == 200
+    assert "まだ日誌がありません" in page_source(body)
+
+
+def test_repository_list_shows_every_day_newest_first(library_address, library):
+    status, headers, body = request(library_address, "GET", "/demo-app/")
+
+    assert status == 200
+    assert headers["Content-Type"] == "text/html; charset=utf-8"
+    document = html5lib.parse(body.decode(), namespaceHTMLElements=False)
+    assert document.findtext(".//title") == "demo-app の日誌"
+    source = page_source(body)
+    assert ":::timeline" in source
+    items = [line for line in source.split("\n") if line.startswith("- **[")]
+    assert [line[5:15] for line in items] == ["2026-11-27", "2026-11-26", "2026-10-31"]
+    assert "前付けを読めないため要約を表示できません。" in items[1]
+    assert b"outside marker" not in body
+
+
+def test_repository_without_slash_redirects(library_address):
+    status, headers, body = request(library_address, "GET", "/demo-app")
+
+    assert status == 301
+    assert headers["Location"] == "/demo-app/"
+    assert int(headers["Content-Length"]) == len(body)
+    assert {name: headers.get(name) for name in EXPECTED_SECURITY_HEADERS} == (
+        EXPECTED_SECURITY_HEADERS
+    )
+
+
+@pytest.mark.parametrize("target", ["/empty-repo/", "/missing/", "/linked-repo/", "/Demo/"])
+def test_repository_list_without_days_is_not_found(library_address, target):
+    status, _, body = request(library_address, "GET", target)
+
+    assert status == 404
+    assert "ページが見つかりません".encode() in body
+    assert b"outside marker" not in body

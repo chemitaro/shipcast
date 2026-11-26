@@ -3,7 +3,7 @@ import ipaddress
 import re
 import socket
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,8 +11,21 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from shipcast.config import Config, ConfigError, config_path, load_config
-from shipcast.model import REPO_ID_PATTERN, JournalFormatError, journal_path, parse_journal
-from shipcast.page import BROKEN_JOURNAL_PAGE, NOT_FOUND_PAGE, wrap_markdown
+from shipcast.model import (
+    REPO_ID_PATTERN,
+    JournalFormatError,
+    JournalMeta,
+    journal_path,
+    parse_journal,
+)
+from shipcast.page import (
+    BROKEN_JOURNAL_PAGE,
+    NOT_FOUND_PAGE,
+    JournalDay,
+    index_page,
+    repo_page,
+    wrap_markdown,
+)
 
 _ASSET_CONTENT_TYPES = {
     ".css": "text/css; charset=utf-8",
@@ -27,6 +40,8 @@ _ASSET_CONTENT_TYPES = {
 _BRACKETED_HOST = re.compile(r"\[([a-z0-9.:_%~-]+)\](?::[0-9]+)?", re.ASCII)
 _NAMED_HOST = re.compile(r"([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?::[0-9]+)?", re.ASCII)
 _JOURNAL_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_JOURNAL_YEAR = re.compile(r"[0-9]{4}")
+_JOURNAL_FILE = re.compile(r"([0-9]{4})-[0-9]{2}-[0-9]{2}\.md")
 _HTML_CONTENT_TYPE = "text/html; charset=utf-8"
 _TEXT_CONTENT_TYPE = "text/plain; charset=utf-8"
 
@@ -41,9 +56,14 @@ def split_path(target: str) -> tuple[str, ...] | None:
         parts = tuple(unquote(part, errors="strict") for part in path[1:].split("/"))
     except UnicodeDecodeError:
         return None
+    # Only the last part may be empty: a trailing slash, as in /<repo>/.
     if any(
-        not part or part.startswith(".") or "/" in part or "\\" in part or "\x00" in part
-        for part in parts
+        (not part and index < len(parts) - 1)
+        or part.startswith(".")
+        or "/" in part
+        or "\\" in part
+        or "\x00" in part
+        for index, part in enumerate(parts)
     ):
         return None
     return parts
@@ -56,6 +76,90 @@ def resolve_inside(root: Path, parts: Sequence[str]) -> Path | None:
     except (OSError, RuntimeError):
         return None
     return candidate if candidate.is_relative_to(base) else None
+
+
+OnError = Callable[[Path, Exception], None]
+
+
+def journal_repos(journal_dir: Path) -> list[str]:
+    """Return the repository directories directly under the journal directory, by name."""
+    root = resolve_inside(journal_dir, ())
+    try:
+        names = sorted(entry.name for entry in root.iterdir()) if root and root.is_dir() else []
+    except OSError:
+        return []
+    return [
+        name for name in names if REPO_ID_PATTERN.fullmatch(name) and _is_dir(journal_dir, name)
+    ]
+
+
+def journal_files(journal_dir: Path, repo: str) -> list[tuple[date, Path]]:
+    """Return the journal files of `repo` inside the journal directory, newest first."""
+    if not REPO_ID_PATTERN.fullmatch(repo) or not _is_dir(journal_dir, repo):
+        return []
+    files = []
+    for year in _names(journal_dir / repo):
+        if not _JOURNAL_YEAR.fullmatch(year) or not _is_dir(journal_dir, repo, year):
+            continue
+        for name in _names(journal_dir / repo / year):
+            match = _JOURNAL_FILE.fullmatch(name)
+            if match is None or match[1] != year:
+                continue
+            try:
+                day = date.fromisoformat(name.removesuffix(".md"))
+            except ValueError:
+                continue
+            path = resolve_inside(journal_dir, (repo, year, name))
+            try:
+                if path is not None and path.is_file():
+                    files.append((day, journal_dir / repo / year / name))
+            except OSError:
+                continue
+    return sorted(files, reverse=True)
+
+
+def read_meta(path: Path, on_error: OnError) -> JournalMeta | None:
+    """Read the front matter of one journal file; report and return None if unreadable."""
+    try:
+        return parse_journal(path.read_bytes().decode("utf-8"))[0]
+    except (OSError, UnicodeDecodeError, JournalFormatError) as error:
+        on_error(path, error)
+        return None
+
+
+def journal_days(journal_dir: Path, repo: str, on_error: OnError) -> list[JournalDay]:
+    """Return every day of `repo`, newest first, for the repository list."""
+    return [
+        JournalDay(repo, day, read_meta(path, on_error))
+        for day, path in journal_files(journal_dir, repo)
+    ]
+
+
+def latest_journals(journal_dir: Path, on_error: OnError) -> list[JournalDay]:
+    """Return each repository's newest readable day, newest first, for the cover."""
+    latest = []
+    for repo in journal_repos(journal_dir):
+        for day, path in journal_files(journal_dir, repo):
+            meta = read_meta(path, on_error)
+            if meta is not None:
+                latest.append(JournalDay(repo, day, meta))
+                break
+    return sorted(latest, key=lambda entry: (-entry.day.toordinal(), entry.repo))
+
+
+def _names(directory: Path) -> list[str]:
+    try:
+        return [entry.name for entry in directory.iterdir()]
+    except OSError:
+        return []
+
+
+def _is_dir(journal_dir: Path, *parts: str) -> bool:
+    path = resolve_inside(journal_dir, parts)
+    try:
+        return path is not None and path.is_dir()
+    except OSError:
+        return False
 
 
 def security_headers() -> tuple[tuple[str, str], ...]:
@@ -135,8 +239,17 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         # BaseHTTPRequestHandler collapses leading slashes in self.path.
         parts = split_path(self.requestline.split()[1])
+        if parts == ():
+            self._send_html(HTTPStatus.OK, self._cover())
+            return
         if parts and parts[0] == "_ds" and self._serve_asset(parts[1:]):
             return
+        if parts and parts[0] != "_ds" and REPO_ID_PATTERN.fullmatch(parts[0]):
+            if len(parts) == 1:
+                self._redirect(f"/{parts[0]}/")
+                return
+            if parts[1] == "" and self._serve_repo(parts[0]):
+                return
         if parts is not None and len(parts) == 2 and self._serve_journal(*parts):
             return
         self._send_html(HTTPStatus.NOT_FOUND, NOT_FOUND_PAGE)
@@ -153,8 +266,30 @@ class _Handler(BaseHTTPRequestHandler):
 
     do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST
 
+    def _report_unreadable(self, path: Path, error: Exception) -> None:
+        self.log_error("%s: %s", path, error)
+
+    def _cover(self) -> str:
+        latest = latest_journals(self.journal_dir, self._report_unreadable)
+        return index_page(latest, journal_repos(self.journal_dir))
+
+    def _serve_repo(self, repo: str) -> bool:
+        days = journal_days(self.journal_dir, repo, self._report_unreadable)
+        if not days:
+            return False
+        self._send_html(HTTPStatus.OK, repo_page(repo, days))
+        return True
+
+    def _redirect(self, location: str) -> None:
+        self._send_body(
+            HTTPStatus.MOVED_PERMANENTLY,
+            _TEXT_CONTENT_TYPE,
+            f"Moved to {location}\n".encode(),
+            extra_headers=(("Location", location),),
+        )
+
     def _serve_asset(self, parts: tuple[str, ...]) -> bool:
-        if not parts:
+        if not parts or "" in parts:
             return False
         path = resolve_inside(self.design_dir, parts)
         if path is None:
@@ -306,7 +441,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
     try:
         print(
-            f"http://{authority}/<repo>/<YYYY-MM-DD> で日誌を読めます\n"
+            f"http://{authority}/ で日誌を読めます\n"
             f"日誌の置き場: {config.journal_dir}\n"
             f"デザインシステムの置き場: {design_dir}\n"
             "Ctrl+C で止まります",

@@ -198,13 +198,16 @@ def parse_journal_like(source: str) -> tuple[dict[str, str], str]:
     return meta, "\n".join(lines[closing + 1 :])
 
 
-LITERAL_MARKDOWN = re.compile(r"(?:[^!-/:-@\[-`{-~]|&#[0-9]+;)*")
+LITERAL_MARKDOWN = re.compile(r"(?:[^!-/:-@\[-`{-~]|&#[0-9]+;|&amp;)*")
 HOSTILE_TITLE = "直した {href=https://evil.example} **太字** [x](https://evil.example) :::"
 HOSTILE_LEAD = "## x\n:::cards\n<img src=x onerror=alert(1)> &amp; :name[y] {now}"
 
 
 def test_markdown_text_turns_every_ascii_punctuation_into_a_reference():
-    assert markdown_text(string.punctuation) == "".join(f"&#{ord(c)};" for c in string.punctuation)
+    assert markdown_text(string.punctuation) == "".join(
+        "&amp;" if c == "&" else f"&#{ord(c)};" for c in string.punctuation
+    )
+    assert markdown_text("&amp;") == "&amp;amp&#59;"
     assert markdown_text("Abc 123 日本語　全角") == "Abc 123 日本語　全角"
     assert markdown_text("a\nb\rc") == "a b c"
     assert LITERAL_MARKDOWN.fullmatch(markdown_text(HOSTILE_TITLE + HOSTILE_LEAD))
@@ -253,11 +256,12 @@ def test_index_markdown_lists_one_card_per_latest_journal():
     headings = [line for line in cards if line.startswith("## ")]
     assert headings == [
         "## 見本の題名 11月27日 "
-        "{href=/sample-lib/2026-11-27 badge=sample-lib,2026-11-27 more=この日を読む}",
+        "{href=/sample-lib/2026-11-27 badge=2026-11-27 more=この日を読む}",
         "## 見本の題名 11月26日 "
-        "{href=/demo-app/2026-11-26 badge=demo-app,2026-11-26 more=この日を読む}",
+        "{href=/demo-app/2026-11-26 badge=2026-11-26 more=この日を読む}",
     ]
-    assert cards[cards.index(headings[0]) + 1] == "見本の要約 11月27日です。"
+    first = cards.index(headings[0])
+    assert cards[first + 1 : first + 4] == ["見本の要約 11月27日です。", "", "sample-lib の日誌"]
     assert "- [demo-app](/demo-app/)\n- [sample-lib](/sample-lib/)" in body
 
 

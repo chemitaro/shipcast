@@ -79,12 +79,14 @@ BROKEN_JOURNAL_PAGE = notice_page(
 )
 
 
+# "&" gets the named reference: marked turns "&#38;amp&#59;" back into the entity "&amp;"
+# (shown as "&"), but keeps "&amp;amp&#59;" as the text "&amp;".
 _PUNCTUATION = {ord(c): f"&#{ord(c)};" for c in string.punctuation}
-_PUNCTUATION |= {ord("\n"): " ", ord("\r"): " "}
+_PUNCTUATION |= {ord("&"): "&amp;", ord("\n"): " ", ord("\r"): " "}
 
 
 def markdown_text(value: str) -> str:
-    """Return `value` as literal Markdown text: every ASCII punctuation becomes `&#NN;`.
+    """Return `value` as literal Markdown text: ASCII punctuation becomes `&#NN;` (`&` `&amp;`).
 
     Neither marked nor ds.js (heading attributes, `:::` lines, inline components,
     `**…**`) reads a character reference as syntax, and the browser shows the character.
@@ -119,9 +121,9 @@ def index_markdown(latest: Sequence[JournalDay], repos: Sequence[str]) -> str:
     if latest:
         cards = "".join(
             f"## {markdown_text(entry.meta.title)} "
-            f"{{href={_day_url(entry)} badge={entry.repo},{entry.day.isoformat()}"
-            " more=この日を読む}\n"
-            f"{markdown_text(entry.meta.lead)}\n"
+            f"{{href={_day_url(entry)} badge={entry.day.isoformat()} more=この日を読む}}\n"
+            f"{markdown_text(entry.meta.lead)}\n\n"
+            f"{entry.repo} の日誌\n"
             for entry in latest
             if entry.meta is not None
         )

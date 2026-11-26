@@ -31,6 +31,8 @@ shipcast serve
 ```
 
 - 既定では `http://127.0.0.1:8765/` で待ち受けます（同じPCからだけ読めます）。`--host`・`--port`、または設定ファイルの `[serve]` の `host`・`port` で変えられます。
+- 表紙は `/` です。repositoryごとに、いちばん新しい日の日誌がカードで並びます。
+- repositoryごとの一覧は `/<repo>/` です（例 `/demo-app/`）。日誌のある日が、新しい順に月ごとに並びます。
 - 1日のページは `/<repo>/<YYYY-MM-DD>` です（例 `/demo-app/2026-11-26`）。`<repo>` は `shipcast repo add` で登録した id です。
 - 止めるときは `Ctrl+C` を押します。
 - 配信は日誌の置き場を読むだけで、何も書きません。置き場の外のファイル、`..` やsymlinkで外を指す道筋には404を返します。
@@ -57,7 +59,7 @@ design_system_dir = "/path/to/repository/spec-dock/design-system"
 tailscale serve --bg 8765
 ```
 
-表示された `https://<端末の名前>.<tailnetの名前>.ts.net/` に、日誌の道筋（`/<repo>/<YYYY-MM-DD>`）を付けて開きます。`tailscale serve` は、tailnetの端末からの要求を手元の `127.0.0.1:8765` に中継します。
+表示された `https://<端末の名前>.<tailnetの名前>.ts.net/` を開くと、表紙が出ます。`tailscale serve` は、tailnetの端末からの要求を手元の `127.0.0.1:8765` に中継します。
 
 - 公開をやめるときは `tailscale serve --https=443 off` を実行します（設定の一覧は `tailscale serve status`）。
 - 443番をほかの用途で使っているときは、`tailscale serve --bg --https=8443 8765` のように別のポートで公開し、`https://<端末の名前>.<tailnetの名前>.ts.net:8443/` で開きます（止めるのは `tailscale serve --https=8443 off`）。ページは `/_ds/` を読むので、`--set-path` で道筋の下に置く方法は使えません。
