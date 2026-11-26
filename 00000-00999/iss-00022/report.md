@@ -33,6 +33,13 @@ ID: "iss-00022"
 - 2人目：none（standard）
 - 記録：shipcastの `.workbench/final-quality-gate/iss-00022-fqg-1/closure.md`
 
+### PR と CI（2026-11-27）
+
+- PR：https://github.com/chemitaro/shipcast/pull/37（`chemitaro/iss-00022` → `main`、`Refs #22`、自動で閉じる語句なし）。head `0c6a5aedf54941e55bfcf77bfe87bdd42b696c8c`（合格のコミットと同じ。記録のみのコミットなし）
+- CI：`github-pr-checks` の observer で exit 0、`OBSERVED_CI_PASS`（2026-11-26T15:26:17Z）。Actions の `ci`（run 45848895312、event pull_request、head 0c6a5ae）が success。coverage ACTIONS_AND_COMMIT_STATUSES、expected_inventory UNSPECIFIED、merge_readiness READY（MERGEABLE、CLEAN）
+- 最初の観測（head 1d92763）は main との衝突で CI が起動せず `STARTUP_GRACE_EXPIRED`（exit 2）。main を取り込んだ後に観測し直した
+- マージと `spec-dock work finish` は統括が行う
+
 ## Outcome
 
 - 実装担当：Codex（gpt-6.2-sol / medium、Orca dispatch `ctx_3871ec17ceaa`）。区切りのレビューはなし（plan の関門）
