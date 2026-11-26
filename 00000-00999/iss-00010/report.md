@@ -64,3 +64,6 @@ ID: "iss-00010"
 ## Residual Risks / Follow-ups
 
 - P2-3（上）：未消化の話題の中身を読む `Store` の関数は、iss-00019・iss-00020 で足す。
+- PR：https://github.com/chemitaro/shipcast/pull/24（branch `chemitaro/iss-00010`、head `018aa49b59a1e5cb7af95fb83ca7df23c8c763b5`、base `main` `279f747`）。`Refs #10`（自動で閉じる書き方は使わない）
+- CI：`ci` run 45805357159（pull_request、`018aa49`）が success。`github-pr-checks` の観測は OBSERVED_CI_PASS、coverage ACTIONS_AND_COMMIT_STATUSES、merge_readiness READY（2026-11-26T10:53:40Z）。外部の CheckRun は観測の範囲外。
+- マージと `spec-dock work finish` は統括が行う。

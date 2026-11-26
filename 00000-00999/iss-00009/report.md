@@ -29,6 +29,16 @@ ID: "iss-00009"
   - P2：タブ・改行を含む `title`・`path` で `repo list` の1件1行が崩れる。申し送り：`repo list` の出力では各値の `\` を `\\`、タブを `\t`、改行を `\n`、CRを `\r` に置き換えて1件1行を保つ（T-15 に1件足す）
   - P3：要件の「`cli.py` の `repo` の行だけ」と、設計 D-01 の `import` の1行の追加の食い違い。D-01 に従う（`import` の1行は `repo` の行の変更に付随するもの）
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（attempt 01。P0 0件、P1 0件、P2 0件、P3 0件、coverage complete）
+- 合格のコミット：`9e5a113923fa0f50a88fe56c44867b79ebdc9c71`（範囲 `279f747..9e5a113`）
+- レビュアー：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。観点 functional-correctness、requirements-closure、test-adequacy、api-contract、reliability-recovery。second_opinion none（standard）
+- テスト：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（84 passed）、`uv run shipcast --help`、`uv run shipcast repo --help` がすべて exit 0
+- 記録：shipcastの worktree の `.workbench/final-quality-gate/iss-00009-fqg-1/closure.md`
+- 実装担当の追加の判断（仕様にない並行登録のロック、設定先が登録対象の内側なら止める動き、`cli.py` の `# isort: skip`）は、レビュアーが「正しく安全で、仕様の意味に反しない」と判断した
+- `plan.cue` は仕様レビューの合格後に、各 step の `status: "done"` を書いただけ（中身の変更なし）
+
 ## Outcome
 
 - S-01 `e822849452208bd375e315a0349b3fd0b90655b7` で、schema 1 の設定を読み込み、検証済みの凍結 dataclass を返す API を追加した。
