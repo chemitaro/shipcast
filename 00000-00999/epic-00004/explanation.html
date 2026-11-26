@@ -9,60 +9,108 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E3 執筆 ― 分析で話題にまとめ、Geminiが日誌を書く
-lead: 集めた出来事を、安いモデルが話題（Story）にまとめ、Antigravityの Gemini 4 Neon が「要約＋読み物」の日誌のMarkdownを書きます。モデルの経路は設定で差し替えられます。
-category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+title: E3 執筆 ― 安いモデルが話題にまとめ、Geminiが日誌を書く
+lead: 集めた出来事を、安いモデルが話題（Story）にまとめ、Antigravityの Gemini 4 Neon が「要約＋読み物」の日誌のMarkdownを書きます。外部のモデルへの送信はすべて1つの入口を通り、秘密情報らしい文字列を伏せ、エージェントの中からは `agy` を呼びません。
+category: 説明資料（Epic・strict）
+audience: E3の各Issueを担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定・strict）
+updated: 2026-11-26
+docid: epic-00004
 ---
 
 ## この資料で分かること
 
 :::summary
 - 分析と執筆で、なぜ別のモデルを使うのか
-- モデルの経路の部品と、試験での偽物の経路
-- 日誌のMarkdownの形
-- 失敗したときと、外部へ渡す情報の扱い
+- 外部のモデルへの送信の入口（`GuardedRoute`）と、そこで守ること
+- 日誌のMarkdownの形、機械で作る部分とモデルが書く部分
+- 「発信の芽」などを後から足す拡張点
+- なぜこのEpicが strict なのか
 :::
 
 ## 2つのモデルの役割
 
 :::columns
 ### まとめる：安いモデル
-Codex（GPT-6.2 Sol。より安いモデルで足りるならそれ）が、出来事の一覧を読み、話題にまとめます。正確さが要り、量が多いので、安く厳密なモデルを使います。
+Codex（GPT-6.2 Sol。より安いモデルで足りるならそれ）が、出来事の一覧を読み、話題にまとめます。量が多く、決まったJSONの形が要るので、安く厳密なモデルを使います。
 
 ### 書く：Gemini 4 Neon
-Antigravity（`agy -p`）のGemini 4 Neonが、話題の骨組みから、日本語の読みやすい本文を書きます。文章の美しさが要るところだけに使います。
+Antigravity（`agy -p`）の Gemini 4 Neon が、話題の骨組みから、日本語の読みやすい本文を書きます。文章の質が要るところだけに使います。
 :::
 
-## モデルの経路
+```plantuml id=pipeline
+@startuml
+title 出来事から日誌のファイルまで
+participant "shipcast write" as W
+database "状態" as DB
+participant "共通の入口\nGuardedRoute" as G
+participant "分析のモデル\nCodex" as A
+participant "書き手のモデル\nGemini 4 Neon" as N
+participant "組み立て\nbuild_entry" as B
+W -> DB : その日の出来事を読む
+alt 出来事が0件
+  W -> B : 前付けと1行だけ（モデルは呼ばない）
+else 出来事がある
+  W -> G : 出来事（JSON）を分析へ
+  G -> G : 守りの判定 → 伏せる
+  G -> A : 伏せた後の文字列
+  A --> W : 話題のJSON（形が違えば1回だけ頼み直す）
+  W -> DB : 話題を保存する（書く前に）
+  W -> G : 話題の骨組みを書き手へ
+  G -> G : 守りの判定 → 伏せる
+  G -> N : 伏せた後の骨組み
+  N --> W : 本文のMarkdown
+  W -> B : 話題・出来事・本文・拡張点
+end
+B --> W : 日誌のMarkdown
+W -> W : 一時ファイルに書き、os.replace で置き換える
+@enduml
+```
+
+## 送信の入口：GuardedRoute
+
+外部のモデルへの送信は、すべて `GuardedRoute` という1つの入口を通ります。経路の実装（codex・antigravity・claude・fake）は、この入口の外から直接呼べません。
+
+:::flow
+- **守りの判定** — 経路が `antigravity` で、エージェントの印の環境変数があれば、子のプロセスを作る前に `RouteRefused` で止まる {icon=shield}
+- **伏せる** — `redact()` で、トークン・鍵・パスワードの行を `[伏せた]` にする。失敗したら送らずに止まる {icon=x}
+- **呼ぶ** — 時間の上限（既定10分）付きで経路の実装を呼ぶ。失敗と時間切れは `RouteFailed` になる {icon=zap}
+:::
 
 :::datatable 経路の一覧
-| 経路 | 使う場面 | 呼び方 |
+| 経路 | 使う場面 | 呼び方（実装の最初に `--help` で確かめる） |
 |---|---|---|
-| codex | 分析の既定 | `codex exec -m <model> --sandbox read-only -` |
-| antigravity | 書き手の既定 | `agy -p … --output-format json`（道具は使わせない） |
-| claude | 予備 | `claude -p --tools ""` |
-| fake | 試験・予行 | 決まった応答を返す |
+| `codex` | 分析の既定 | `codex exec -m <model> -c model_reasoning_effort=<effort> --sandbox read-only --skip-git-repo-check -` |
+| `antigravity` | 書き手の既定 | `agy -p <prompt> --output-format json`（道具は使わせない。エージェントの中では止まる） |
+| `claude` | 予備 | `claude -p --model <model> --tools ""` |
+| `fake` | 試験・予行 | 入力から決まった応答を返す。外部を呼ばない |
 :::
 
-正確な引数は、実装の最初に各コマンドの `--help` で確かめます。
+:::danger エージェントの中からは `agy` を呼ばない
+Antigravityの規約は、第三者のエージェントやアプリで `agy` を包む使い方を、個人のプランで認めていません。印は `CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_` で始まる環境変数です。判定は閉じる側に倒し、迷ったら止めます。試験では子のプロセスを作る関数を偽物に差し替え、本物の `agy`・`codex`・`claude` を起動しません。
+:::
 
-:::danger エージェントの中からはAntigravityを呼ばない
-Antigravityの規約は、第三者のエージェントやアプリで `agy` を包む使い方を、個人のプランで認めていません。環境変数 `CLAUDECODE` や `CODEX_` で始まるもの、Orcaの作業者の印があるときは、antigravity の経路は呼ばずに止まります。試験とハッカソンの作業者は fake の経路を使います。
+:::keyvalue cols=1
+- 伏せる文字列 | `ghp_`・`github_pat_`・`sk-`・`AKIA`・`xox[bp]-` で始まる文字列
+- 伏せる塊 | `-----BEGIN ... PRIVATE KEY-----` から `-----END ... PRIVATE KEY-----` まで
+- 伏せる行の値 | `PASSWORD=`・`TOKEN=`・`SECRET=` の後ろ
+- 置き換え | `[伏せた]`
 :::
 
 ## 日誌のMarkdownの形
 
-日誌は、SpecDockの説明資料と同じデザインシステムのタグを使うMarkdownです。
+パスと前付けは、全Epicの共通の契約（E1の D-05）に従います。本文は、SpecDockの説明資料と同じデザインシステムのタグを使います。
 
-```markdown
+```markdown title="~/.local/share/shipcast/journal/shipcast/2026/2026-11-26.md"
 ---
 title: shipcast の開発日誌 2026-11-26
 lead: 今日の要約の1〜2文
 category: 開発日誌
 date: 2026-11-26
 repo: shipcast
+analyst: codex/gpt-6.2-sol
+writer: antigravity/gemini-4-neon
+generated_at: 2026-11-27T03:02:11+09:00
 ---
 
 :::summary 今日の要約
@@ -74,32 +122,70 @@ repo: shipcast
 :::
 
 ## 今日の物語
-（です・ます調の読み物。話題ごとに小見出し）
+（です・ます調の読み物。話題ごとに ### の小見出し）
 
 :::checklist あなたを待っていること
 - 本人待ちのtodo
 :::
+
+:::metrics
+- 5 | merge |
+- 3 | 閉じたIssue |
+:::
 ```
 
-出来事のない日は、モデルを呼ばず「大きな動きはありませんでした。」の1行にします。
+:::compare
+| 部分 | 誰が作るか | 理由 |
+|---|---|---|
+| 前付け | ✓ shipcastが機械で | パスと項目の契約を崩さない |
+| 要約・知っておくべきこと・物語・待っていること | ○ 書き手のモデル | 読みやすい文章が要る |
+| `:::metrics` の数 | ✓ shipcastが出来事から数える | モデルに数えさせると誤る |
+| 末尾の囲み（発信の芽など） | ✓ 拡張点の部品 | 書く段の中を書き換えずに足す |
+:::
 
-## 失敗と安全
+## 拡張点
+
+日誌の組み立ては `build_entry(repo, day, stories, events, body_md, *, extensions)` です。`extensions` は `JournalExtension`（`render(repo, day, stories, events) -> str | None`）の一覧で、空でない文字列を `:::metrics` の後に足します。E3では一覧は空です。E5の iss-00019 が「発信の芽」をここに登録します。こうすることで、E5は書く段の中を書き換えずに、日誌に囲みを足せます。
+
+## なぜ strict なのか
+
+:::decision E3を strict にする status=決定済み date=2026-11-26
+### 決定
+E3と、その子の iss-00014（モデルの経路）を strict にします。iss-00015・iss-00016 は standard です。
+### 理由
+外部のモデルへ情報を送る唯一の境界と、`agy` を呼ばない守りを持つからです。送った情報は取り消せず、規約に反する呼び出しも取り消せません。
+### 影響
+仕様のレビューにChatGPTの2人目が付き、最終品質ゲートにも2人目（ChatGPT、取れなければ GPT-6.2 Astra）が付きます。失敗の条件にはすべて影響と回復を書き、試験で確かめます。
+:::
 
 :::risks
 | リスク | 影響 | 起きやすさ | 対策 |
 |---|---|---|---|
+| 秘密情報がモデルに渡る | 高 | 低 | 共通の入口で必ず伏せ、伏せる処理が失敗したら送らない |
+| エージェントの中から `agy` が呼ばれる | 高 | 低 | 印の判定を子のプロセスの前に行い、試験は偽のrunnerだけ |
 | モデルの呼び出しが失敗する | 中 | 中 | 話題と出来事を先に保存し、前の日誌を壊さずに次の実行で書き直す |
-| 秘密情報がモデルに渡る | 高 | 低 | トークン・鍵・パスワードの行を、渡す前に伏せる |
-| 書き手が事実を創作する | 中 | 中 | 骨組みだけを渡し、話題にない事実を書かないよう指示する |
+| 書き手が事実を創作する | 中 | 中 | 骨組みだけを渡し、数字と前付けは機械で作る |
 | 分析のJSONの形が崩れる | 低 | 中 | 1回だけ頼み直し、だめなら失敗として記録する |
 :::
 
-## Issueの分担
+## Issueの分担と順番
 
 :::steps
-1. **iss-00014 モデルの経路** — 経路の部品、伏せる処理、エージェントの中の検出
-2. **iss-00015 話題にまとめる** — 分析のプロンプトとJSON、保存
-3. **iss-00016 日誌を書く** — 書き手のプロンプト、Markdownの組み立て、`shipcast write`
+1. **iss-00014 モデルの経路（strict）** — `GuardedRoute`、`redact()`、エージェントの中の守り、fake。E1の iss-00009 の後すぐに始められる
+2. **iss-00015 話題にまとめる（standard）** — 分析のプロンプトとJSON、頼み直し、保存。E2の iss-00011・iss-00012 も待つ
+3. **iss-00016 日誌を書く（standard）** — 書き手のプロンプト、`build_entry`（metricsと拡張点）、`shipcast write`
+:::
+
+:::note 依存の整理（2026-11-26）
+以前は、E3全体がE2全体を待っていたため、収集と関係のない iss-00014 まで止まっていました。E3 → E2 の依存を外し、実データが要る iss-00015 だけが iss-00011・iss-00012 を待つ形に直しました。これで iss-00014 は、E2の iss-00011 や E4の iss-00017 と同じWaveで並行に進められます。
+:::
+
+:::checklist E3の完了の確かめ
+- `fake` の経路で `shipcast write` が日誌を作る試験が通る
+- 出来事が0件の日は、モデルの呼び出しが0回で1行の日誌になる
+- 全経路で、経路の実装に届く文字列が伏せた後のものである
+- エージェントの印があると、antigravity が子のプロセスを作らずに止まる
+- 本物の経路での日誌の作成は、本人の手動の実行だけで行う
 :::
 </script>
 <script src="../../../design-system/ds.js"></script>

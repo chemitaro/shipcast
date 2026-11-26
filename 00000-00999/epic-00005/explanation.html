@@ -9,64 +9,156 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E4 閲覧 ― 日誌のMarkdownをWebページとして配信する
-lead: Gitの外に置いた日誌のMarkdownを、配信のときにデザインシステムで描き、表紙・一覧・各日のページとしてブラウザーで読めるようにします。読む場所はTailscaleのtailnetです。
-category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+title: E4 閲覧 ― 日誌をWebページで、安全に読む
+lead: 日誌のMarkdownのファイルを、配信のときにデザインシステムでWebページにします。HTMLは保存しません。tailnetの端末から読まれるので、パスの検査、`<\/script` の扱い、CSPのヘッダーで守ります。画面のデザインは Opus 5.5 が直接実装します。
+category: 説明資料（Epic・strict）
+audience: E4の各Issueを担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定・strict）
+updated: 2026-11-26
+docid: epic-00005
 ---
 
 ## この資料で分かること
 
 :::summary
-- HTMLを保存せず、Markdownを配信のときに描く理由
-- 3種類のページ（表紙・一覧・各日）
-- Tailscaleで読むまでの手順
+- 表紙・一覧・各日の日誌の、3つのページと道筋
+- Markdownを包むだけの薄いページの仕組み
+- 配信の4つの防御（パスの検査、エスケープ、CSP、待ち受けの場所）
+- ロジックはCodex、画面は Opus 5.5 という実装の分担
+- E2・E3を待たずに、見本の日誌で並行に作れる理由
 :::
 
-## なぜHTMLを保存しないのか
+## 3つのページ
 
-日誌の正本はMarkdownの1か所にします。HTMLを保存すると、同じ中身が2つになり、デザインを直すたびに全部を作り直すことになります。shipcastは、SpecDockの説明資料と同じ薄い形で、配信のときにMarkdownを包んで返します。
+:::frame browser url="http://127.0.0.1:8765/" caption="表紙（iss-00018）：repositoryごとの最新の日誌が並ぶ"
+**shipcast の開発日誌**
 
-:::beforeafter
-### 保存する形
-日誌を書くたびにHTMLを作る。デザインの更新で全ファイルを作り直す。
-
-### 描く形（採用）
-Markdownだけを保存し、`shipcast serve` が返すときに包む。デザインシステムの更新はすぐ全部に効く。
+| shipcast | 2026-11-26 |
+|---|---|
+| 今日はCLIの骨組みが入り、設定の登録が動き始めました。 | :btn[読む]{primary} |
 :::
 
-## 3種類のページ
-
-:::cards cols=3
-### 表紙 `/` {icon=book}
-全repositoryの最新の日誌が、カードで並びます。
-
-### 一覧 `/<repo>/` {icon=calendar}
-そのrepositoryの日誌が、新しい順に日付とleadで並びます。
-
-### 各日 `/<repo>/<日付>` {icon=file}
-1日の日誌の本文。summaryやwarningのタグが部品として描かれます。
+:::datatable 道筋
+| 道筋 | 中身 | 作るIssue |
+|---|---|---|
+| `/` | 表紙。`:::cards` で、repositoryごとの最新の日誌（題名・lead・日付） | iss-00018 |
+| `/<repo>/` | 一覧。`:::timeline` で、日付と lead が新しい順 | iss-00018 |
+| `/<repo>/<YYYY-MM-DD>` | その日の日誌のページ | iss-00017 |
+| `/_ds/<file>` | デザインシステム（ds.css、ds.js、vendor） | iss-00017 |
 :::
 
-デザインシステム（`ds.css`、`ds.js`）は、登録したrepositoryの `spec-dock/design-system/` から `/_ds/` で配ります。shipcastのrepositoryには写しません。
+表紙と一覧も、Markdownを組んでから同じ包み方で描きます。ページの見た目は、すべてデザインシステムが受け持ちます。
 
-## Tailscaleで読む
+## 薄いページの仕組み
+
+```plantuml id=wrap
+@startuml
+title 日誌のページが描かれるまで
+actor "本人のブラウザー" as B
+participant "shipcast serve" as S
+participant "resolve_inside" as R
+participant "wrap_markdown" as WM
+collections "日誌のMarkdown" as MD
+B -> S : GET /shipcast/2026-11-26
+S -> R : 日誌の置き場の中か確かめる
+R --> S : 中のパス（外なら404）
+S -> MD : 読む
+S -> WM : Markdownと題名
+WM --> S : <\/script と <!-- を置き換えて包んだHTML
+S --> B : HTML＋CSP＋nosniff
+B -> S : GET /_ds/ds.css、/_ds/ds.js
+S --> B : デザインシステム
+B -> B : ds.js がMarkdownを描く（図はブラウザーの中で）
+@enduml
+```
+
+包んだページ（設計の D-01）は、次の5つだけでできています。SpecDockの説明資料と同じ「薄い形」です。
 
 :::steps
-1. **配信を立てる** — `shipcast serve`（既定で 127.0.0.1:8765）
-2. **tailnetに出す** — 本人が1回だけ `tailscale serve --bg 8765` を実行する（Tailscaleの設定は本人が変える）
-3. **読む** — スマートフォンやほかのPCから、tailnetのURLを開く
+1. **`<head>` の基本** — `charset`、`viewport`、前付けの `title` を入れた `<title>`（HTMLとしてエスケープ）
+2. **見た目** — `<link rel="stylesheet" href="/_ds/ds.css">`
+3. **本文** — `<script type="text/markdown" id="ds-source">` の中に、置き換えた日誌のMarkdown
+4. **描画** — `<script src="/_ds/ds.js">`。ブラウザーの中でMarkdownを部品と図に描く
+5. **空の `<body>`** — 中身はすべて ds.js が作る
+:::
+
+デザインシステムは、このrepositoryに写さず、設定の `serve.design_system_dir`（空なら登録したrepositoryの `spec-dock/design-system/`）のファイルを `/_ds/` で配ります。
+
+## 4つの防御
+
+:::cards cols=2
+### パスの検査 {icon=folder badge=F-02}
+URLを復号してから `Path.resolve()` し、日誌（またはデザインシステム）の置き場の中かを `resolve_inside` の1か所で確かめます。`..`、`%2e%2e`、`%2f`、置き場の外へのsymlinkは、中身を読まずに404です。
+
+### エスケープ {icon=code badge=F-03}
+日誌の本文はcommitの文や会話から来るので、`<\/script` が混ざりえます。`wrap_markdown` の1か所で、`<\/script` を `<\/script`（ds.js が読むときに戻す）に、`<!--` を `<\!--` に置き換えます。
+
+### CSPのヘッダー {icon=shield badge=F-04}
+デザインシステムのMarkdownは生のHTMLを描くので、すべての応答にCSP（インラインのscriptとイベントの属性を止める）と `X-Content-Type-Options: nosniff` を付けます。
+
+### 待ち受けの場所 {icon=globe badge=R-03}
+既定は `127.0.0.1` だけで待ち受けます。tailnetへの公開は、本人が1回だけ `tailscale serve` を実行します。shipcastはTailscaleの設定を変えません。
+:::
+
+```text title="すべての応答に付けるCSP"
+default-src 'self'; script-src 'self' https://unpkg.com;
+style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;
+object-src 'none'; base-uri 'none'; frame-ancestors 'none'
+```
+
+:::note CSPとデザインシステム
+図の部品（PlantUML）とコードの色分けは unpkg から読むので、`script-src` に unpkg を許します。描けないときは、要る最小の許可（例 `'wasm-unsafe-eval'`）だけを足し、scriptに `'unsafe-inline'` は許しません。実際のブラウザーで、見本の日誌の部品と図が描け、`<img onerror>` が動かないことを確かめます。
+:::
+
+## 実装の分担：ロジックはCodex、画面は Opus 5.5
+
+本人の方針（決定 20）で、画面のデザイン・レイアウト・表示の部分は、GPT-6.2 Sol に頼まず、Opus 5.5 が直接実装します。テストで確かめられるロジックは、Codexが実装します。
+
+:::raci
+| 作業 | Codex（GPT-6.2 Sol / medium） | Opus 5.5（画面） | タスク担当（Opus 5.5） |
+|---|---|---|---|
+| パスの検査 `resolve_inside` | A | I | C |
+| 応答のヘッダー `security_headers` | A | I | C |
+| HTTPの道筋と配信の部品 | A | I | C |
+| ページの枠 `wrap_markdown` | I | A | C |
+| 表紙の `:::cards` と一覧の `:::timeline` | I | A | C |
+| ブラウザーでの見た目の確かめ（390px） | I | A | C |
+:::
+
+:::keyvalue cols=1
+- iss-00017（strict） | ロジックの手順 S-01・S-02 → Codex（`impl`）、画面の手順 S-03・S-04 → Opus 5.5 / high（`impl-ui`）
+- iss-00018（light） | 全部の手順 → Opus 5.5 / medium（`impl-ui`）
+:::
+
+## E2・E3と並行に作れる理由
+
+E4は、日誌のパスと前付けの契約（E1の D-05）だけに頼ります。そのため、E3が本物の日誌を書く前に、契約どおりの **見本の日誌**（`tests/fixtures`、架空の内容）で、配信とページを作って確かめられます。E4の依存はE1だけです。
+
+## 失敗したときの動き
+
+:::risks
+| リスク | 影響 | 起きやすさ | 対策 |
+|---|---|---|---|
+| 置き場の外のファイルが返る | 高 | 低 | `resolve_inside` の1か所で確かめ、試験で `..`・符号化・symlinkを試す |
+| 日誌の文字列がページの中で動く | 高 | 低 | `<\/script` と `<!--` の置き換え、CSP、ブラウザーでの確かめ |
+| デザインシステムが見つからない | 中 | 中 | 起動のときに確かめ、設定の書き方を示して止まる |
+| デザインシステムが将来CSPに合わなくなる | 中 | 低 | 試験とブラウザーでの確かめで気づく |
 :::
 
 ## Issueの分担
 
 :::steps
-1. **iss-00017 配信と日誌のページ** — 包む関数、配信の部品、Tailscaleの手順
-2. **iss-00018 表紙と一覧** — 前付けを読み、cardsとtimelineのMarkdownを組む
+1. **iss-00017 配信と日誌のページ（strict）** — 防御の1か所（パス・エスケープ・ヘッダー）、配信の部品、ページの枠、READMEのTailscaleの手順
+2. **iss-00018 表紙と一覧（light）** — 前付けを読んで `:::cards` と `:::timeline` のMarkdownを組む。iss-00017 の後
 :::
 
-E4はE1の後に、見本の日誌を使って、E2・E3と並行に作れます。
+:::checklist E4の完了の確かめ
+- 見本の日誌で `shipcast serve` を立て、表紙・一覧・各日が実際のブラウザーで描かれる
+- CSPの下で、部品と図が描ける
+- スマートフォンの幅（390px）で横にはみ出さない
+- `..` や符号化したpathが404になる
+:::
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

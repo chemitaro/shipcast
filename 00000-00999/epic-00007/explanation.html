@@ -9,46 +9,119 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E6 夜の自動実行 ― 毎晩3時に全repositoryの日誌を作る
-lead: 登録した全repositoryの前日の日誌を、毎晩3時にlaunchdから自動で作ります。何度実行しても重複せず、1つの失敗でほかを止めません。
+title: E6 夜の自動実行 ― 毎晩3時に、前日の日誌を作る
+lead: `shipcast run` が、登録した全repositoryの前日の日誌を順に作り、macOSのlaunchdが毎晩3時にそれを呼びます。1つの失敗でほかを止めず、何度実行しても重複しません。登録の読み込みは本人が行います。
 category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+audience: E6の各Issueを担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定）
+updated: 2026-11-26
+docid: epic-00007
 ---
 
 ## この資料で分かること
 
 :::summary
-- `shipcast run` が1回で何をするか
-- 重ねて動かない・重複しない仕組み
-- launchdの登録と、外付けvolumeでの注意
+- `shipcast run` が1晩に何をするか
+- 同じ日を何度実行しても重複しない仕組み
+- 前の実行と重ならないようにするlock
+- launchdの登録と、外付けvolumeの許可（TCC）の扱い
 :::
 
-## `shipcast run`
+## 1晩の流れ
 
-:::steps
-1. **lockを取る** — 前の実行が動いていれば、重ねずに終わる
-2. **repositoryごとに処理** — 集める → まとめる → 書く。失敗は記録して次へ
-3. **記録する** — 開始・終了・結果・誤りを状態に残す
+```plantuml id=night
+@startuml
+title 毎晩3時の shipcast run
+start
+:launchd が3時に shipcast run を呼ぶ;
+if (run.lock を取れる？) then (取れる)
+  :前日の日付を決める（設定の timezone）;
+  repeat :登録した次のrepository;
+    :集める → まとめる → 書く;
+    if (失敗した？) then (はい)
+      :実行の記録に誤りを残す\n（TCCなら直し方を添える）;
+    else (いいえ)
+      :実行の記録に成功を残す;
+    endif
+  repeat while (まだrepositoryがある？) is (はい)
+  :lockを放す;
+  if (全部が成功？) then (はい)
+    :終了コード0;
+  else (いいえ)
+    :終了コード1;
+  endif
+else (取れない)
+  :前の実行が動いていると記録する;
+  :何もせず終了コード0;
+endif
+stop
+@enduml
+```
+
+## 重複しない仕組み
+
+:::cards cols=2
+### 出来事は1件のまま {icon=database}
+出来事のidは、出所と元のID（SHAなど）から決まります。`INSERT OR IGNORE` なので、2回目の実行で件数は増えません。
+
+### 日誌は置き換わる {icon=file}
+同じ日の日誌は、一時ファイルに書いてから `os.replace` で置き換えます。途中で失敗しても前のファイルは壊れません。
 :::
-
-同じ日を何度実行しても、Eventは安定したIDで重複せず、日誌のファイルは置き換わるだけです。
 
 ## launchdの登録
 
-`shipcast schedule install` が `~/Library/LaunchAgents/com.shipcast.nightly.plist` を書きます。毎日3時に、`uv tool install` で入れた `shipcast` の絶対pathで `run` を動かします。worktreeのcheckoutからは動かしません。
-
-:::warning 外付けvolumeのrepository
-launchdから動く処理は、macOSの許可（TCC）の確認の画面を出せません。外付けvolumeのrepositoryを読むには、動く実行ファイルに本人があらかじめフルディスクアクセスを与えます。読めないときは、直し方を実行の記録に残します。
+:::terminal title="登録と外し方"
+$ uv tool install /path/to/shipcast
+# worktreeのcheckoutからではなく、入れた shipcast の絶対pathを使う
+$ shipcast schedule install
+# ~/Library/LaunchAgents/com.shipcast.nightly.plist を書き、読み込みのcommandを示す
+$ shipcast schedule uninstall
+# plistを外し、外すcommandを示す
 :::
 
-登録（`launchctl` での読み込み）は本人の環境への変更なので、本人が実行します。
+:::keyvalue cols=1
+- 時刻 | `StartCalendarInterval` の Hour 3、Minute 0
+- 呼ぶもの | `uv tool install` で入れた `shipcast` の絶対pathと `run`
+- ログ | 状態の置き場の `logs/`（標準出力と誤り）
+- 読み込み | `launchctl bootstrap gui/<uid> …` は本人が実行する。shipcastは `--load` を付けたときだけ呼ぶ
+:::
+
+:::note 外付けvolumeとmacOSの許可（TCC）
+launchdから外付けvolumeのrepositoryを読むと、macOSの許可で `Operation not permitted` になることがあります。shipcastはGitの誤りの文からこれを見分け、許可の付け方（フルディスクアクセス）を実行の記録に添えます。READMEにも手順を書きます。
+:::
+
+## 失敗したときの動き
+
+:::guide 夜の実行がうまくいかなかったとき
+- 実行の記録（`runs`）に誤りがありますか？
+  - ない
+    - 記録そのものがありますか？
+      - ない
+        - **launchdの登録を確かめます（`shipcast schedule install` の示すcommand）。**
+      - ある（lockが取れなかった）
+        - **前の実行が長引いています。ログを見て、次の晩を待ちます。**
+  - ある
+    - 誤りに `Operation not permitted` がありますか？
+      - はい
+        - **添えられた手順で、フルディスクアクセスを付けます。**
+      - いいえ
+        - **ログを見て直し、`shipcast run --date <その日>` で同じ日を作り直します。**
+:::
 
 ## Issueの分担
 
 :::steps
-1. **iss-00021 shipcast run** — 全repositoryの処理、記録、lock、TCCの見分け
-2. **iss-00022 launchdの登録** — plistの生成、install・uninstall、READMEの手順
+1. **iss-00021 shipcast run（standard）** — 全repositoryの順の処理、実行の記録、lock、TCCの見分け、再実行で重複しないこと
+2. **iss-00022 launchdの登録（standard）** — plistの生成、`schedule install|uninstall`、READMEの導入と許可の手順。iss-00021 の後
+:::
+
+E6は、E3（日誌を書く）とE4（読む）の両方が終わってから始めます。
+
+:::checklist E6の完了の確かめ
+- `shipcast run --date <今日>` を2回動かして、出来事が増えず、日誌が置き換わる
+- 2つのrepositoryのうち1つが失敗しても、もう1つの日誌ができる
+- plistに3時、`shipcast` の絶対path、ログの置き場が入る
+- `launchctl` の読み込みは本人が行う
 :::
 </script>
 <script src="../../../design-system/ds.js"></script>

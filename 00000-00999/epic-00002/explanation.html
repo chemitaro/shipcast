@@ -9,89 +9,220 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E1 基盤 ― CLI・設定・データの約束・状態の置き場
-lead: ほかの5つのEpicが同時に作業できるように、最初にコマンドの骨組み、設定ファイル、データの形、状態の置き場の約束を決めて動かします。
+title: E1 基盤 ― CLI・設定・データの約束・日誌の契約
+lead: ほかの全Epicが同時に作業できるように、CLI、設定ファイル、データの型、状態の置き場、日誌のパスと前付けの契約、CIを、最初に動く形でmainへ入れます。
 category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+audience: E1〜E6を担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定）
+updated: 2026-11-26
+docid: epic-00002
 ---
 
 ## この資料で分かること
 
 :::summary
-- E1が先に決める4つの約束（CLI、設定、データの形、状態）
-- 設定ファイル `config.toml` の形と、repositoryの登録のしかた
-- Event・Story・Entryの意味の違い
+- E1が「最初の15分」で入れる約束と、それがなぜ並行作業の前提になるのか
+- 設定ファイル `config.toml` の形と、repositoryの登録の規則
+- Event・Story・Entryの型と、SQLiteの状態の表
+- 全Epicの共通の契約：日誌のMarkdownのパスと前付け
+- 統括がマージできるようにするCI（GitHub Actions）
 :::
 
-## なぜ最初に作るのか
+## なぜ最初に約束を入れるのか
 
-ハッカソンでは、Orcaの作業者が複数のIssueを同時に進めます。作業者どうしが同じ型と同じ置き場を使わないと、最後に統合できません。そこで、E1で約束を決め、mainに入れてから、ほかのEpicを始めます。
+shipcastは、集める（E2）・書く（E3）・描く（E4）を、別々の作業者が同時に作ります。作業者どうしが同じ名前・同じ形を使わないと、後でつなぐときに食い違います。E1は、全員が読み込む **約束** だけを先に、動く形でmainに入れます。中身の処理は各Epicが作ります。
 
-## 4つの約束
+```plantuml id=uses
+@startuml
+title E1の約束を、ほかのEpicが読み込む
+top to bottom direction
+package "E1 基盤" {
+  [CLIの骨組み\nshipcast.cli] as CLI
+  [設定\nshipcast.config] as CFG
+  [型と日誌の契約\nshipcast.model] as MODEL
+  [状態\nshipcast.state] as STATE
+}
+[E2 収集] as E2
+[E3 執筆] as E3
+[E4 閲覧] as E4
+[E5 おまけ] as E5
+[E6 夜の自動実行] as E6
+E2 --> CFG : 登録したrepositoryを読む
+E2 --> STATE : 出来事を保存する
+E3 --> MODEL : 話題と日誌の形を使う
+E3 --> STATE : 話題を保存する
+E4 --> MODEL : 日誌の前付けを読む
+E5 --> STATE : ネタポイントを足す
+E6 --> CLI : run と schedule を足す
+@enduml
+```
 
-:::cards cols=2
-### CLI {icon=terminal}
-`shipcast` の下位のコマンド：`repo`、`collect`、`write`、`run`、`serve`、`draft`、`schedule`。中身は各Epicが作ります。
+## CLIの骨組み
 
-### 設定 {icon=file}
-`~/.config/shipcast/config.toml`。登録したrepository、モデルの経路、配信、ネタポイントのしきい値。
+`shipcast` のコマンドは、下位のコマンドを最初からすべて登録しておき、中身のないものは「未実装」と示して終了コード2を返します。各Epicは、自分の下位のコマンドの中身だけを書けば済みます。
 
-### データの形 {icon=layers}
-`shipcast.model` に、Event・Story・Entryの型を1か所だけ置きます。
-
-### 状態 {icon=database}
-`~/.local/state/shipcast/state.sqlite3`。同じ出来事を二度保存しても1件のままです。
+:::datatable 下位のコマンド
+| コマンド | 中身を作るIssue | 役割 |
+|---|---|---|
+| `repo add` / `repo list` | iss-00009 | 対象のrepositoryを登録・一覧する |
+| `collect` | iss-00011 | その日の出来事を集めて保存する |
+| `write` | iss-00016 | 集める → まとめる → 書くで日誌を作る |
+| `serve` | iss-00017 | 日誌をWebページとして配信する |
+| `draft` | iss-00020 | Xの下書きを作る |
+| `run` | iss-00021 | 全repositoryの日誌を一度に作る |
+| `schedule` | iss-00022 | 毎晩3時のlaunchdの登録を作る |
 :::
 
-## データの形
+## 設定ファイル
 
-:::glossary
-- **Event**（イベント）: 出所（Git・SpecDock・Orca）から観測した1つの事実。commit、Scopeの終了、会話など
-- **Story**（ストーリー）: 関係するEventをまとめた、人に伝える意味のある話題。何を・なぜ・知っておくべきこと・待っていること・ネタポイントを持つ
-- **Entry**（エントリー）: 1つのrepositoryの1日の日誌のファイル
-:::
-
-## 設定の見本
-
-```toml
+```toml title="~/.config/shipcast/config.toml（見本）"
 schema = 1
 timezone = "Asia/Tokyo"
+journal_dir = "~/.local/share/shipcast/journal"
+state_dir = "~/.local/state/shipcast"
 
 [models.analyst]
-route = "codex"
+route = "codex"          # codex | claude | fake
 model = "gpt-6.2-sol"
+effort = "low"
 
 [models.writer]
-route = "antigravity"
+route = "antigravity"    # antigravity | claude | codex | fake
 model = "gemini-4-neon"
+thinking = "high"
+
+[serve]
+host = "127.0.0.1"
+port = 8765
+design_system_dir = ""   # 空なら、登録したrepositoryの spec-dock/design-system を使う
+
+[neta]
+threshold = 6
 
 [[repos]]
 id = "shipcast"
 path = "/abs/path/to/shipcast"
 ref = "main"
+title = "shipcast"
 orca = true
 ```
 
-`shipcast repo add <path>` は、SpecDockを使うrepository（`spec-dock/workspace.json` がある）だけを足します。
+:::tip 登録の規則
+- `shipcast repo add <path>` は、`spec-dock/workspace.json` があるrepositoryだけを足します。SpecDockを使っていないrepositoryは、足さずに止まります
+- 既存のファイルの末尾に `[[repos]]` の塊を文字列で足し、既存の行とコメントを保ちます
+- 設定ファイルが壊れているときは、行と直し方を示して止まります
+:::
+
+## データの型と状態
+
+```plantuml id=model
+@startuml
+title 出来事・話題・日誌の関係
+hide empty methods
+class Event {
+  id : 出所と元のIDのハッシュ
+  repo_id
+  source : git・specdock・orca
+  kind : commit・merge・scope_opened など
+  at : ISO 8601
+  title
+  body
+  refs
+  actor
+}
+class Story {
+  id
+  repo_id
+  date
+  title
+  what
+  why
+  notice
+  waiting
+  event_ids
+  neta : score 0〜3
+}
+class Entry {
+  repo_id
+  date
+  path
+  analyst
+  writer
+  story_ids
+  generated_at
+}
+Story "1" o-- "1..*" Event : まとめる
+Entry "1" o-- "0..*" Story : 書く
+@enduml
+```
+
+型は `shipcast.model` にdataclassで1か所だけ書き、JSONとの行き来の関数と版（`schema = 1`）を付けます。状態は `shipcast.state` のSQLiteに残ります。
+
+:::keyvalue cols=1
+- `events` | 主キーは `id`（出所と元のIDのハッシュ）。`INSERT OR IGNORE` で、同じ出来事を二度保存しても1件のまま
+- `stories` | 分析のモデルがまとめた話題
+- `entries` | 書いた日誌の記録
+- `runs` | 実行の開始・終了・結果・誤り
+- `neta_ledger` | 話題ごとのネタポイントと、消化済みか
+:::
+
+## 日誌のパスと前付けの契約
+
+日誌のMarkdownは、E3が書き、E4とE5が読みます。両者の間の約束は、ここ（設計の D-05）だけが正本で、コードでは `shipcast.model` の `journal_path`・`read_frontmatter`・`write_frontmatter` にします。ほかのIssueは、パスや項目の名前を自分で書きません。
+
+:::tree
+~/.local/share/shipcast/journal/   # journal_dir
+  shipcast/                         # repo（設定の repos.id）
+    2026/                           # 年
+      2026-11-25.md
+      2026-11-26.md                 # 1日1本
+:::
+
+:::datatable 前付けの項目
+| 項目 | 必須 | 例 | 読む側 |
+|---|---|---|---|
+| `title` | 必須 | shipcast の開発日誌 2026-11-26 | 表紙・一覧・ページの題名 |
+| `lead` | 必須 | 1〜2文の要約 | 表紙のカード・一覧 |
+| `date` | 必須 | 2026-11-26 | 一覧の並び |
+| `repo` | 必須 | shipcast | 表紙の分け方 |
+| `category` | 任意 | 開発日誌 | 表示 |
+| `analyst` / `writer` | 任意 | codex/gpt-6.2-sol | 表示 |
+| `generated_at` | 任意 | 2026-11-27T03:02:11+09:00 | 表示 |
+| `schema` | 任意 | 1 | 版の確かめ |
+:::
+
+前付けは `---` で囲む、1行に `key: value` の平らな形だけです。YAMLのライブラリに頼らずに読めます。必須の項目が欠けた日誌を読むと、欠けた項目を名指して失敗します。
+
+## CIと検証のcommand
+
+統括がPRをマージするには、`coding-task` のマージの規則が求める「CIの合格の観測」が要ります。そのため最初のIssue（iss-00008）で、GitHub Actionsを入れます。
+
+:::terminal title="手元とCIで流す検証"
+$ uv run ruff check
+# 整形と検査
+$ uv run pytest -q
+# 試験。外部のモデルは呼ばない（fake の経路）
+$ uv run shipcast --help
+# 7つの下位のコマンドが出る
+:::
 
 ## Issueの分担
 
 :::steps
-1. **iss-00008 CLIの骨組み** — packageと試験・検査の土台
-2. **iss-00009 設定と登録** — `config.toml` の読み込み、`repo add|list`
-3. **iss-00010 型と状態** — Event・Story・Entry、SQLite
+1. **iss-00008 CLIの骨組み（light）** — packageと `shipcast` の入口、`pytest` と `ruff`、`AGENTS.md` の検証のcommand、CI
+2. **iss-00009 設定と登録（standard）** — `config.toml` の読み込み、`repo add` と `repo list`
+3. **iss-00010 型・状態・日誌の契約（standard）** — `shipcast.model`、`shipcast.state`、日誌のパスと前付けの関数
 :::
 
-iss-00009 と iss-00010 は、iss-00008 の後に同時に進められます。
+iss-00008 を1人で先にmainへ入れ、その後 iss-00009 と iss-00010 を並行に進めます。E1が完了すると、E2・E3・E4が始められます。
 
-## 確かめ方
-
-```sh
-uv run shipcast --help
-uv run pytest -q
-uv run ruff check
-```
+:::checklist E1の完了の確かめ
+- `uv run shipcast --help` が7つの下位のコマンドを示す
+- `uv run pytest -q` と `uv run ruff check` が通る
+- PRでCIが合格する
+- `shipcast repo add` でshipcast自身を登録できる
+- 日誌のパスと前付けを書いて読むと元に戻る
+:::
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

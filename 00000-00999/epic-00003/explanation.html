@@ -9,62 +9,159 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E2 収集 ― Git・SpecDock・Orcaから出来事を集める
-lead: 登録したrepositoryの、指定した日の出来事を、Git・SpecDock（必須）とOrcaの会話（任意）から集め、Eventとして保存します。対象のrepositoryは読むだけです。
+title: E2 収集 ― Git・SpecDock・Orcaから、その日の出来事を読むだけで集める
+lead: 登録したrepositoryの、指定した日の出来事を、Git・SpecDock（必須）とOrcaの会話（任意）から集め、出来事（Event）として状態に保存します。どの出所も、機械向けの出力を読むだけで、対象を書き換えません。
 category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+audience: E2の各Issueを担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定）
+updated: 2026-11-26
+docid: epic-00003
 ---
 
 ## この資料で分かること
 
 :::summary
-- 3つの出所から何を集めるか
-- 対象のrepositoryを書き換えないための読み方
-- Orcaがないときの動き
+- 3つの出所から、何を・どのコマンドで読むのか
+- collectorの共通の約束と、出所を後から足す仕組み
+- 「読むだけ」を守る方法
+- Orcaがないとき、GitやSpecDockが読めないときの動き
 :::
 
 ## 3つの出所
 
-:::compare
-| | Git | SpecDock | Orca |
-|---|---|---|---|
-| 必須か | ✓ 必須 | ✓ 必須 | △ 任意（本人は使う前提） |
-| 集めるもの | 正本のbranchに入ったcommitとmerge | 作られた・閉じたScope、本人待ちのtodo | そのrepositoryでの本人とエージェントの会話 |
-| 読み方 | `git --no-optional-locks log` | `spec-dock … --json` | `orca` のCLI（`--json`） |
-| 読めないとき | そのrepositoryを失敗として記録 | 同じ | 警告だけ残して続ける |
+:::cards cols=3
+### Git（必須） {icon=branch badge=iss-00011}
+その日に正本のbranch（設定の `ref`）に入ったcommitとmerge。作業用のbranchの未統合のcommitは入れません。
+
+### SpecDock（必須） {icon=list badge=iss-00012}
+その日に作られた・閉じたScopeと、本人待ちのtodo。Scopeの時刻はGitHubのIssueから読みます。
+
+### Orcaの会話（任意） {icon=user badge=iss-00013}
+そのrepositoryのworktreeで、その日に動いた本人とエージェントの会話の発言。
 :::
 
-作業用のworktreeとbranchの、まだ統合されていないcommitは集めません。日誌に載るのは、その日にmainへ入った成果です。
+## collectorの共通の約束
 
-## collectorの約束
-
-すべての出所は、同じ形の部品です。
-
-```python
-class Collector(Protocol):
-    name: str
-    def collect(self, repo: RepoConfig, day: date) -> CollectResult: ...
-    # CollectResult = events: list[Event], warnings: list[str]
+```plantuml id=collector
+@startuml
+title collectorの共通の約束と3つの実装
+top to bottom direction
+hide empty members
+interface Collector {
+  name : str
+  collect(repo, day) : CollectResult
+}
+class CollectResult {
+  events : list[Event]
+  warnings : list[str]
+}
+class GitCollector
+class SpecDockCollector
+class OrcaCollector
+Collector <|.. GitCollector
+Collector <|.. SpecDockCollector
+Collector <|.. OrcaCollector
+Collector ..> CollectResult : 返す
+note right of Collector
+  shipcast.collect.base（iss-00011）
+  登録は shipcast.collect.COLLECTORS
+end note
+@enduml
 ```
 
-`shipcast collect --repo <id> --date <日付>` が全部の部品を呼び、Eventを状態に保存します。
+`shipcast collect --repo <id> --date <日付>` は、登録された全collectorを順に呼び、結果を `Store.add_events` で保存します。iss-00011 がこの約束とGitのcollectorを先に作り、iss-00012 と iss-00013 は、同じ約束に従うcollectorを1つずつ足します。そのため、iss-00012 は iss-00011 の後に始めます（2026-11-26 に依存を追加）。
 
-:::warning 書き換えない
-`git fetch`、checkout、indexを書き換える操作は使いません。SpecDockとOrcaは、CLIの機械向けの出力だけを読み、内部のファイルの形を解釈しません。
+## 各出所の読み方
+
+::::tabs
+### Git
+:::terminal title="その日のcommitとmergeを読む（読むだけ）"
+$ git --no-optional-locks -C <path> log <ref> --since <0時> --until <24時> --date=iso-strict --format=...
+# 親が2つ以上なら merge、それ以外は commit
+:::
+1日は、設定の `timezone`（既定 Asia/Tokyo）の0時から24時です。題名・本文・作者・SHA・変更したファイルの数を取ります。
+
+### SpecDock
+`spec-dock scope list` の出力には時刻がありません。そこで、ScopeのGitHubのIssueの時刻を `gh` で **読むだけ** で併用します（本人の決定 23）。
+
+:::datatable SpecDockの出来事を作る3つの読み取り
+| 読むもの | コマンド | 使う項目 |
+|---|---|---|
+| Scopeの一覧 | `spec-dock scope list --json --project <path>` | `id`、`kind`、`title`、`parent_id`、`number`、`url` |
+| Scopeの時刻 | `gh issue list --state all --json number,title,state,createdAt,closedAt,url` | `number`、`createdAt`、`closedAt` |
+| todo | `spec-dock todo list --status all --json --project <path>` | 状態と時刻 |
+:::
+Scopeは `number` でIssueとつなぎます。その日の `createdAt` は `scope_opened`、`closedAt` は `scope_closed` になります。
+
+### Orca
+`orca search` は全文の検索で、問い合わせの語が要り、その日の会話を漏れなく並べる用途に向きません。実際に確かめた2つのコマンドを使います。
+:::steps
+1. **`orca agent list --json`** — `result.agents[]` の `worktreeId`（`<repo-id>::<path>`）のpathと、`updatedAt`（ミリ秒）で、そのrepositoryのその日の会話を選ぶ
+2. **`orca agent read <orcaSessionId> --limit 100 --json`** — `result.entries[]` のうち `kind` が `message` の発言（`role`、`text`）だけをつなぐ。道具の呼び出しは入れない
+:::
+発言そのものには時刻がないので、その日の判定は会話の `updatedAt` で行います。1つの会話が1件の出来事（`conversation`）になります。
+::::
+
+```plantuml id=seq
+@startuml
+title shipcast collect の流れ
+participant "shipcast collect" as Cmd
+participant "Gitのcollector" as G
+participant "SpecDockのcollector" as S
+participant "Orcaのcollector" as O
+database "状態\nSQLite" as DB
+Cmd -> G : collect(repo, day)
+G --> Cmd : commitとmerge
+Cmd -> S : collect(repo, day)
+S --> Cmd : Scopeとtodo（gh が使えなければ警告）
+Cmd -> O : collect(repo, day)
+O --> Cmd : 会話（Orcaがなければ警告と空）
+Cmd -> DB : add_events（同じidは1件のまま）
+@enduml
+```
+
+## 読むだけを守る
+
+:::warning 対象のrepositoryを書き換えない
+- `git fetch`、checkout、indexを書き換える操作を使いません。Gitは `--no-optional-locks` を付けて呼びます
+- 収集の前後で、対象の `HEAD`・index・作業ツリーの状態が変わらないことを、試験で確かめます
+- SpecDockはカタログの内部のファイルを解釈せず、CLIの機械向けの出力（`specdock.cli/v2`）だけを読みます
+- `gh` は一覧を読むだけです。Issueを作る・閉じる・書き換える操作はしません
+:::
+
+## 失敗したときの動き
+
+:::guide 出所が読めないとき
+- どの出所が読めませんか？
+  - Orca（CLIがない、動いていない、読めない）
+    - **警告を残して空を返し、Orcaなしで日誌を作ります。**
+  - `gh`（ない、認証がない）
+    - **Scopeの出来事を警告にして、todoの出来事だけを集めます。**
+  - GitかSpecDock（pathがGitでない、refがない、CLIが失敗）
+    - **そのrepositoryの収集を失敗として記録し、ほかのrepositoryは続けます。**
+:::
+
+:::risks
+| リスク | 影響 | 起きやすさ | 対策 |
+|---|---|---|---|
+| Orca CLIの出力の形が版で変わる | 中 | 中 | 項目の名前を見本（tests/fixtures、架空の値）に固定し、試験で気づく |
+| `gh issue list` の500件を超えるrepository | 低 | 低 | MVPでは対象外。超えたら警告を出す |
+| 外付けvolumeのrepositoryがlaunchdから読めない | 中 | 中 | E6で理由と直し方を記録に添える |
 :::
 
 ## Issueの分担
 
 :::steps
-1. **iss-00011 Git** — collectorの約束、`shipcast collect`、Gitの部品
-2. **iss-00012 SpecDock** — Scopeとtodoの変化
-3. **iss-00013 Orca** — 会話の記録。最初に、Orca CLIでpathと時刻で絞って読む方法を確かめる
+1. **iss-00011 Gitと共通の約束（standard）** — `shipcast.collect.base`、`shipcast collect`、Gitのcollector。最初に入れる
+2. **iss-00012 SpecDockの収集（light）** — `spec-dock` と `gh issue list` を読むだけ。iss-00011 の後
+3. **iss-00013 Orcaの収集（light・任意）** — `orca agent list` と `orca agent read`。iss-00012 の後
 :::
 
-## 確かめ方
-
-shipcast自身のrepositoryで `shipcast collect --repo shipcast --date <今日>` を動かし、3つの出所のEventが状態に入ることを見ます（Orcaは動いていれば）。
+:::checklist E2の完了の確かめ
+- shipcast自身で `shipcast collect --repo shipcast --date <今日>` を動かし、3つの出所の出来事が状態に入る（Orcaは動いていれば）
+- 2回動かしても出来事の件数が増えない
+- 収集の前後で、対象の `HEAD` と index が変わらない
+:::
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>

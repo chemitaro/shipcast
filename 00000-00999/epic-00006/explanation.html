@@ -9,45 +9,101 @@
 <!-- ▼ 説明資料の本文（Markdown）。編集するのはこのブロックだけです。 -->
 <script type="text/markdown" id="ds-source">
 ---
-title: E5 おまけ ― ネタポイントとXの下書き
-lead: 話題ごとにネタポイントをため、しきい値を超えたら日誌に「発信の芽」の印を付け、Xの投稿の下書きを手元に作れるようにします。投稿は本人が行います。
+title: E5 おまけ ― ネタポイントと「発信の芽」、Xの下書き
+lead: 話題ごとのネタポイントをため、しきい値を超えたら日誌に「発信の芽」の印を付け、Xの投稿の下書きを手元に作れるようにします。shipcastは投稿しません。投稿は本人が行います。
 category: 説明資料（Epic）
-audience: 実装を担当するエージェント、ハッカソンの見学者
-status: 仕様を確定
+audience: E5の各Issueを担当するエージェント、統括、ハッカソンの見学者
+status: 仕様を確定（2026-11-26 改定）
+updated: 2026-11-26
+docid: epic-00006
 ---
 
 ## この資料で分かること
 
 :::summary
-- ネタポイントとは何か、なぜcommitの数で数えないのか
-- 「発信の芽」の印が出る条件
-- Xの下書きの置き場と、消化済みの扱い
+- ネタポイントとは何で、どうたまり、どう消化されるのか
+- 「発信の芽」の囲みが、書く段の中を書き換えずに日誌に足される仕組み（拡張点）
+- Xの下書きの作り方と、外へ送らない約束
 :::
 
-## ネタポイントとは
+## ネタポイント
 
-分析のモデルが、話題ごとに「外へ伝える価値」を0〜3で付けます。基準は、変化の大きさ、読者への学び、写真や図で見せやすいか、です。
+分析のモデル（E3の iss-00015）は、話題ごとに **ネタポイント**（`neta.score`、0〜3）を付けます。基準は、変化の大きさ、読者への価値、見せやすさです。E5は、この点数を repositoryごとの台帳にため、たまった分で発信を促します。
 
-:::note commitの数で数えない理由
-エージェントの開発では、作業者の数やcommitの方針しだいでcommitの数が大きく変わります。数えるのは量ではなく、話題の価値です。
+```plantuml id=ledger
+@startuml
+title ネタポイントの台帳の流れ
+[*] --> 未消化 : 話題を保存したときに点数を足す
+未消化 --> 未消化 : 次の日の話題の点数も足す
+未消化 --> 印が出る : 未消化の合計がしきい値（既定6）以上
+印が出る --> 消化済み : shipcast draft x で下書きに使う
+消化済み --> [*]
+@enduml
+```
+
+:::keyvalue cols=1
+- 台帳 | `neta_ledger`（話題のid、点数、消化済みか）。同じ話題は二度足さない
+- 残高 | `neta_balance(repo)` は未消化の合計
+- しきい値 | 設定の `neta.threshold`（既定6）
 :::
 
-## 流れ
+## 「発信の芽」の印と拡張点
 
-:::flow
-- **ためる** — 話題を保存するときに、ネタポイントを台帳に加える {icon=plus}
-- **知らせる** — 未消化の合計がしきい値（既定6）以上なら、日誌に「発信の芽」の囲み {icon=bell}
-- **下書き** — `shipcast draft x --repo <id>` で、Xの本文とハッシュタグの案 {icon=pencil}
-- **消化** — 下書きに使った話題を消化済みにする {icon=check}
+E3の書く段（iss-00016）は、日誌の末尾に囲みを足す **拡張点**（`JournalExtension`）を持ちます。E5の iss-00019 は、そこに部品を1つ登録するだけです。書く段の中は書き換えません。
+
+```plantuml id=ext
+@startuml
+title 拡張点に「発信の芽」を登録する
+hide empty members
+interface JournalExtension {
+  render(repo, day, stories, events) : str | None
+}
+class NetaSprout {
+  しきい値以上なら囲みを返す
+  未満なら None
+}
+class build_entry
+JournalExtension <|.. NetaSprout
+build_entry ..> JournalExtension : 末尾に足す（shipcast.write.EXTENSIONS）
+note right of NetaSprout : iss-00019 が登録する
+@enduml
+```
+
+```markdown title="日誌の末尾に足される囲み"
+:::tip 発信の芽（ネタポイント 7）
+- CLIの骨組みが一晩で入った話
+- 収集の依存を整理して並行に進めた話
+:::
+```
+
+そのため、iss-00019 は iss-00016 の後に始めます（2026-11-26 に依存を追加）。
+
+## Xの下書き
+
+:::terminal title="Xの下書きを作る（投稿はしない）"
+$ uv run shipcast draft x --repo shipcast
+# 未消化の話題から上位を選び、書き手のモデルで本文とハッシュタグの案を作る
+# 下書きは ~/.local/state/shipcast/drafts/shipcast/2026-11-26-x.md
 :::
 
-下書きは状態の置き場の `drafts/<repo>/<日付>-x.md` に置きます。外へは何も送りません。noteの記事とRedditは後に回します。
+:::warning 外へ送らない
+- 下書きは状態の置き場の `drafts/` にMarkdownで置くだけです
+- X・note・Redditなどへ投稿する処理は、shipcastにありません。投稿は本人が手で行います
+- 下書きに使った話題は消化済みになり、次の印の合計から外れます
+- 本文は日本語で140字程度（Xの280字の上限の内側）です
+:::
 
 ## Issueの分担
 
 :::steps
-1. **iss-00019 台帳と印** — ポイントの加算と、日誌への囲み
-2. **iss-00020 Xの下書き** — プロンプトと `draft x`
+1. **iss-00019 台帳と日誌の印（light）** — 話題の保存で点数を足し、拡張点に「発信の芽」を登録する。E3の iss-00016 の後
+2. **iss-00020 Xの下書き（light）** — `shipcast draft x`、プロンプト `prompts/x.md`、使った話題の消化。iss-00019 の後
+:::
+
+:::checklist E5の完了の確かめ
+- fake の経路で、点数がしきい値を超えた日の日誌にだけ「発信の芽」が出る
+- `shipcast draft x` で下書きができ、使った話題が消化済みになる
+- 外部へ何も送らない
 :::
 </script>
 <script src="../../../design-system/ds.js"></script>

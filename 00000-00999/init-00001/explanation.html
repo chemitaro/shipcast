@@ -10,102 +10,312 @@
 <script type="text/markdown" id="ds-source">
 ---
 title: shipcast MVP ― エージェントが書く開発日誌
-lead: AIエージェントが進めた開発を、本人が毎朝読んで理解できるように、プロジェクトごと・日付ごとの開発日誌を自動で作ります。この資料は、MVP全体の目的、仕組み、6つのEpicの分担と順番を説明します。
+lead: AIエージェント（ソフトウェアファクトリー）が進めた開発を、本人が毎朝数分で理解できるように、プロジェクトごと・日付ごとの開発日誌を自動で作ります。この資料は、MVP全体の目的と仕組み、6つのEpicと15のIssueの依存関係、そして「仕様 → 実装 → レビュー → 品質ゲート → マージ」をエージェントの分業で回す開発の進め方を説明します。
 category: 説明資料（Initiative）
-audience: ハッカソンでshipcastの開発を見る人、実装を担当するエージェント
-status: 仕様を確定（ハッカソン前）
+audience: ハッカソンでshipcastの開発を見る人、各Issueを担当するエージェント、統括
+status: 仕様を確定（ハッカソン前・2026-11-26 改定）
+updated: 2026-11-26
+docid: init-00001
+tags: [開発日誌, ソフトウェアファクトリー, SpecDock, Orca]
 ---
 
 ## この資料で分かること
 
 :::summary
-- shipcastが解く問題：ソフトウェアファクトリーでは、開発は進むのに、人は何が起きたかを理解していない
-- 日誌ができるまでの4段の流れ（集める → まとめる → 書く → 描く）
-- 6つのEpicの分担と、ハッカソンの2時間で進める順番
+- shipcastが解く問題：開発はエージェントが進めるのに、人は「何が起きたか」を追えなくなる
+- 日誌ができるまでの4段の流れ（集める → まとめる → 書く → 描く）と、データの置き場
+- 6つのEpic・15のIssueの依存関係と、並行に進められる順番（Wave）
+- この開発そのものの進め方：統括・タスク担当・実装担当・レビュアーの分業と、保証レベルごとの関門
 :::
 
 ## 背景と目的
 
-AIエージェントが開発をほぼ自動で進めると、commitもPRもIssueも増えます。ところが、それを読んで理解する人間の時間は増えません。commitの履歴は機械の記録で、人が読み通す形ではないからです。
+AIエージェントが開発をほぼ自動で進めると、commitもPRもIssueも、人が読むより速く増えます。commitの履歴は機械の記録で、人が読み通す形ではありません。その結果、物事は進んでいるのに、本人は「今日、何が起き、なぜそうなり、自分は何を知っておくべきか」を追えなくなります。
 
-shipcastは、その日の出来事をGit・SpecDock・Orcaの会話から集め、人が読みやすい文体の**開発日誌**を、プロジェクトごとのWebページにします。毎朝、前日に工場が何をしたかを数分で追えることが目標です。
+shipcastは、その日の出来事を **Git・SpecDock・Orcaの会話** から集め、安いモデルで分析して話題にまとめ、Geminiが読みやすい文体で **開発日誌** を書きます。日誌は独自タグ付きのMarkdownで、Gitの外に置き、手元のWebページとして読みます。毎朝、前日に工場が何をしたかを数分で追えることが目標です。
 
-おまけとして、話題ごとの**ネタポイント**がたまると、日誌に「発信の芽」の印が付き、Xの投稿の下書きを作れます。投稿そのものは本人が行います。
+おまけとして、話題ごとの **ネタポイント** がたまると、日誌に「発信の芽」の印が付き、Xの投稿の下書きを作れます。投稿そのものは本人が行います。
 
-## 全体の流れ
+:::glossary
+- **ソフトウェアファクトリー**: AIエージェントが仕様・実装・レビューを分業し、人は判断と承認に集中する開発の形
+- **Event**（イベント）: 集めた1つの出来事。commit、merge、Scopeの作成と終了、todo、会話など
+- **Story**（ストーリー）: 関係する出来事をまとめた1つの話題。何を・なぜ・知っておくべきこと・待っていること・ネタポイントを持つ
+- **Entry**（エントリー）: 1つのrepositoryの1日分の日誌のファイル
+- **Scope**（スコープ）: SpecDockの仕様の単位。Initiative ＞ Epic ＞ Issue の3段
+- **保証レベル**: Scopeごとに、失敗したときの影響と回復の難しさで選ぶ確かめの強さ（light・standard・strict・critical）
+- **統括**: Issueを作業者に依頼し、見守り、PRをマージする役。この開発ではAntigravity
+:::
+
+## 日誌ができるまで
 
 ```plantuml id=flow
 @startuml
-title 日誌ができるまで
+title 日誌ができるまでの4段の流れ
 left to right direction
-rectangle "Git" as Git
-rectangle "SpecDock" as SD
-rectangle "Orcaの会話\n（任意）" as Orca
-rectangle "集める\ncollector" as C
-rectangle "まとめる\n分析（Codex）" as A
-rectangle "書く\nGemini 4 Neon" as W
+skinparam componentStyle rectangle
+package "情報源（読むだけ）" {
+  [Git] as Git
+  [SpecDock\n＋GitHubのIssue] as SD
+  [Orcaの会話\n（任意）] as Orca
+}
+package "shipcast" {
+  [集める\ncollector] as C
+  [まとめる\n分析のモデル] as A
+  [書く\n書き手のモデル] as W
+  database "状態\nSQLite" as ST
+}
 file "日誌のMarkdown\n（Gitの外）" as MD
-rectangle "描く\nshipcast serve" as V
+[描く\nshipcast serve] as V
 actor "本人" as U
 Git --> C
 SD --> C
 Orca --> C
-C --> A : 出来事
-A --> W : 話題の骨組み
-W --> MD
+C --> ST : 出来事を保存
+ST --> A : 出来事
+A --> ST : 話題を保存
+ST --> W : 話題の骨組み
+W --> MD : 一時ファイルから置き換え
 MD --> V
 V --> U : Tailscaleで読む
 @enduml
 ```
 
+:ref[flow] の各段は、次の役割を持ちます。段を分けることで、モデルの経路や情報源を、ほかの段を変えずに差し替えられます。
+
 :::flow
-- **集める** — Git・SpecDock（必須）とOrcaの会話（任意）から、その日の出来事（Event）を集める。モデルは使わない {icon=database}
-- **まとめる** — 安いモデル（Codex。GPT-6.2 Sol、より安いモデルで足りればそれ）が、出来事を話題（Story）にまとめる {icon=search}
-- **書く** — Antigravityの `agy -p` で、Gemini 4 Neonが「要約＋読み物」の日誌を書く {icon=pencil}
-- **描く** — Markdownのファイルを、配信のときにデザインシステムでWebページにする {icon=globe}
+- **集める** — Git・SpecDock（必須）とOrcaの会話（任意）から、その日の出来事を集める。モデルは使わない {icon=database}
+- **まとめる** — 安いモデル（Codex。GPT-6.2 Sol、より安いモデルで足りればそれ）が、出来事を話題にまとめる {icon=search}
+- **書く** — Antigravityの Gemini 4 Neon が「要約＋読み物」の本文を書く。数字と前付けはshipcastが機械で作る {icon=pencil}
+- **描く** — Markdownのファイルを、配信のときにデザインシステムでWebページにする。HTMLは保存しない {icon=globe}
 :::
 
-## 置き場
+### 置き場
 
 :::keyvalue cols=1
 - 設定 | `~/.config/shipcast/config.toml`（登録したrepository、モデルの経路、配信）
-- 状態 | `~/.local/state/shipcast/`（SQLite。出来事・話題・実行の記録・ネタポイント）
-- 日誌 | `~/.local/share/shipcast/journal/<repo>/<年>/<日付>.md`
+- 状態 | `~/.local/state/shipcast/state.sqlite3`（出来事・話題・実行の記録・ネタポイント）
+- 日誌 | `~/.local/share/shipcast/journal/<repo>/<YYYY>/<YYYY-MM-DD>.md`
 :::
 
-どれもrepositoryの外です。shipcastのrepositoryはpublicなので、個人の情報を入れません。
+どれもrepositoryの外です。shipcastのrepositoryはpublicなので、個人の設定・状態・日誌を入れません。日誌のパスと前付け（`title`・`lead`・`date`・`repo` など）は、全Epicが守る **共通の契約** で、E1（epic-00002）の D-05 が正本です。
 
-## Epicの分担と順番
+## 6つのEpic
+
+:::cards cols=3
+### E1 基盤 {icon=layers badge=standard href=../epic-00002/explanation.html}
+CLI、設定、データの型、状態、日誌のパスと前付けの契約、CI。全Epicが使う約束を最初に入れます。
+
+### E2 収集 {icon=database badge=standard href=../epic-00003/explanation.html}
+Git・SpecDock・Orcaの出来事を、読むだけで集めます。collectorの共通の約束を先に作ります。
+
+### E3 執筆 {icon=pencil badge=strict href=../epic-00004/explanation.html}
+分析のモデルが話題にまとめ、書き手のモデルが日誌を書きます。外部のモデルへの送信の境界を持ちます。
+
+### E4 閲覧 {icon=globe badge=strict href=../epic-00005/explanation.html}
+日誌をWebページで読みます。tailnetから読まれる配信の防御を持ち、画面は Opus 5.5 が作ります。
+
+### E5 おまけ {icon=sparkle badge=standard href=../epic-00006/explanation.html}
+ネタポイントがたまると「発信の芽」の印を付け、Xの下書きを手元に作ります。
+
+### E6 夜の自動実行 {icon=clock badge=standard href=../epic-00007/explanation.html}
+毎晩3時に、登録した全repositoryの前日の日誌を作ります。
+:::
+
+## 依存関係と並行の順番
+
+SpecDockでは、Scopeの依存関係を「AはBの後に始める」という向きで、GitHubのIssueの依存（blocked by）として持ちます。Epicの依存は、その子のIssueすべてに引き継がれます。:ref[deps] は、2026-11-26 に整理した後の依存です。
+
+```plantuml id=deps
+@startuml
+title Issueの依存関係（矢印の先を待ってから始める）
+left to right direction
+skinparam packageStyle rectangle
+package "E1 基盤" {
+  rectangle "iss-00008\nCLIの骨組み" as i8
+  rectangle "iss-00009\n設定と登録" as i9
+  rectangle "iss-00010\n型・状態・日誌の契約" as i10
+}
+package "E2 収集" {
+  rectangle "iss-00011\nGitと共通の約束" as i11
+  rectangle "iss-00012\nSpecDock" as i12
+  rectangle "iss-00013\nOrca" as i13
+}
+package "E3 執筆" {
+  rectangle "iss-00014\nモデルの経路" as i14
+  rectangle "iss-00015\n話題にまとめる" as i15
+  rectangle "iss-00016\n日誌を書く" as i16
+}
+package "E4 閲覧" {
+  rectangle "iss-00017\n配信と日誌のページ" as i17
+  rectangle "iss-00018\n表紙と一覧" as i18
+}
+package "E5 おまけ" {
+  rectangle "iss-00019\n台帳と印" as i19
+  rectangle "iss-00020\nXの下書き" as i20
+}
+package "E6 夜の自動実行" {
+  rectangle "iss-00021\nshipcast run" as i21
+  rectangle "iss-00022\nlaunchd" as i22
+}
+i9 --> i8
+i10 --> i8
+i12 --> i11
+i13 --> i12
+i14 --> i9
+i15 --> i11
+i15 --> i12
+i15 --> i14
+i16 --> i15
+i18 --> i17
+i19 --> i16
+i20 --> i19
+i22 --> i21
+@enduml
+```
+
+:::note Epicの依存（子のIssueに引き継がれる）
+E2・E3・E4は **E1の後**、E5は **E3の後**、E6は **E3とE4の後** に始めます。以前はE3がE2全体を待っていたため、モデルの経路（iss-00014）まで収集の完了を待っていました。2026-11-26 にこの依存を外し、実データが要る iss-00015 だけが iss-00011・iss-00012 を待つ形に直しました。
+:::
+
+依存から、同時に進められる組（Wave）が決まります。
 
 :::roadmap
-- **最初の15分** E1 基盤 — CLI、設定、データの形、状態の置き場。ほかの全Epicの約束 {doing}
-- **並行** E2 収集 — Git・SpecDock・Orcaの収集 {todo}
-- **並行** E4 閲覧 — 見本の日誌で、配信とページを先に作る {todo}
-- **E2の後** E3 執筆 — 分析と書き手のモデル、日誌のMarkdown {todo}
-- **時間があれば** E5 おまけ — ネタポイントとXの下書き {todo}
-- **時間があれば** E6 夜の自動実行 — 毎晩3時の `shipcast run` {todo}
+- **Wave 1** iss-00008 — CLIの骨組み、検証のcommand、CI。1人で先にmainへ {doing}
+- **Wave 2** iss-00009・iss-00010 — 設定と登録、型と状態と日誌の契約（並行） {todo}
+- **Wave 3** iss-00011・iss-00014・iss-00017 — Gitの収集、モデルの経路、配信（並行。E1の完了の後） {todo}
+- **Wave 4** iss-00012・iss-00018 — SpecDockの収集、表紙と一覧（並行） {todo}
+- **Wave 5** iss-00013・iss-00015 — Orcaの収集、話題にまとめる（並行） {todo}
+- **Wave 6** iss-00016 — 日誌を書く。ここでshipcast自身の日誌ができる {todo}
+- **Wave 7** iss-00019・iss-00021 — 発信の芽、shipcast run（時間があれば） {todo}
+- **Wave 8** iss-00020・iss-00022 — Xの下書き、launchd（時間があれば） {todo}
 :::
 
-E1が入れば、E2とE4は別々の作業者で同時に進められます。E3はE2の出来事を使い、E5とE6はE3の後です。
+## 開発の進め方：エージェントの分業
+
+この開発は、shipcastが描こうとしている「ソフトウェアファクトリー」そのものの形で進めます。ハッカソンでは画面を共有し、仕様・実装・レビュー・品質ゲート・マージの流れを見せます。
+
+```plantuml id=roles
+@startuml
+title 1つのIssueが仕様からマージまで進む流れ
+actor "本人" as Owner
+participant "統括\nAntigravity" as Coord
+participant "タスク担当\nClaude Code（Opus 5.5）" as TO
+participant "実装担当\nCodex（GPT-6.2 Sol）" as Impl
+participant "画面の実装\nOpus 5.5" as UI
+participant "レビュアー\nspec-reviewer など" as Rev
+Owner -> Coord : 方針と保証レベルを決める
+Coord -> TO : Issueを依頼する（Orcaのworktree）
+TO -> TO : 仕様を書く（要件・設計・計画・説明資料）
+TO -> Rev : 仕様のレビュー（strict は ChatGPT の2人目も）
+Rev --> TO : P0・P1がなければ合格
+TO -> Impl : ロジックの手順を依頼する
+Impl --> TO : 手順ごとにcommitして止まる
+TO -> UI : 画面の手順を依頼する（画面のあるIssueだけ）
+UI --> TO : 手順ごとにcommitして止まる
+TO -> Rev : 区切りのレビュー（計画で置いたところだけ）
+TO -> Rev : 最終品質ゲート（全テストと独立のレビュー）
+Rev --> TO : 合格
+TO -> TO : PRを作り、CIの結果を見る
+TO --> Coord : PRと証拠を報告する（マージしない）
+Coord -> Coord : 証拠を確かめてマージする
+@enduml
+```
+
+:::raci
+| 作業 | 本人 | 統括（Antigravity） | タスク担当（Opus 5.5） | 実装担当（GPT-6.2 Sol） | 画面の実装（Opus 5.5） |
+|---|---|---|---|---|---|
+| 方針と保証レベルの決定 | A | C | C | I | I |
+| Issueの依頼と見守り | I | A | C | I | I |
+| 仕様（要件・設計・計画・説明資料） | I | C | A | I | I |
+| ロジックの実装とテスト | I | I | C | A | I |
+| 画面のデザイン・レイアウト・表示 | C | I | C | I | A |
+| レビューと最終品質ゲート | I | I | A | C | C |
+| PRのマージ | C | A | I | I | I |
+:::
+
+:::decision 開発の進め方の改定 status=決定済み date=2026-11-26
+### 決定
+通常の `coding-task` の流れ（仕様のレビュー、区切りのレビュー、最終品質ゲート）で開発します。画面のデザイン・レイアウト・表示はOpus 5.5が直接実装し、PRのマージは統括が行います。
+### 理由
+ハッカソンで開発の手法そのものを見せるには、レビューと品質ゲートを省かない形が要ります。画面の見た目は、描画を見て判断できるモデルに任せます。
+### 採用しなかった案
+仕様のレビューと品質ゲートを省き、時間内にできるところまで作る案（以前の決定 8。取り消し）。
+### 影響
+各Issueの `plan.cue` に関門（gates）と、モデルと推論（execution）を書きます。統括がマージできるように、最初のIssueでCIを入れます。
+:::
+
+### 保証レベルと関門
+
+保証レベルは、失敗したときの影響と回復の難しさで選びます。値によって、仕様のレビューの人数、区切りのレビュー、最終品質ゲートの2人目が変わります。
+
+:::datatable 15のIssueの保証レベル
+| Issue | 題名 | 保証レベル | 選んだ理由（要約） |
+|---|---|---|---|
+| iss-00008 | CLIの骨組み | light | コードのないrepositoryに骨組みを足すだけ |
+| iss-00009 | 設定と登録 | standard | 全Issueが読む設定の形 |
+| iss-00010 | 型・状態・日誌の契約 | standard | 全Epicが読むデータの約束 |
+| iss-00011 | Gitと共通の約束 | standard | SpecDockとOrcaの収集が依る境界 |
+| iss-00012 | SpecDockの収集 | light | collectorを1つ足すだけ |
+| iss-00013 | Orcaの収集 | light | 任意の連携で、なくても動く |
+| iss-00014 | モデルの経路 | strict | 外部への送信の境界と `agy` の禁止の守り |
+| iss-00015 | 話題にまとめる | standard | 執筆とおまけが読む話題の形 |
+| iss-00016 | 日誌を書く | standard | 配信とおまけが読む日誌の形 |
+| iss-00017 | 配信と日誌のページ | strict | パストラバーサルとscriptの注入の防御 |
+| iss-00018 | 表紙と一覧 | light | 2つのページに閉じる |
+| iss-00019 | 台帳と印 | light | 拡張点に囲みを1つ足すだけ |
+| iss-00020 | Xの下書き | light | 手元に下書きを作るだけ |
+| iss-00021 | shipcast run | standard | 夜の処理の入口 |
+| iss-00022 | launchdの登録 | standard | 本人のmacOSへの登録 |
+:::
+
+:::compare
+| 関門 | light | standard | strict |
+|---|---|---|---|
+| 仕様のレビュー | spec-reviewer（Opus 5.5 / medium） | spec-reviewer（Opus 5.5 / high） | spec-reviewer（Opus 5.5 / high）＋ ChatGPT の2人目 |
+| 区切りのレビュー | なし | 原則なし（多くの手順が依る境界にだけ1つ） | 契約や防御の境界を決める手順の後 |
+| 最終品質ゲート | 独立のレビュー＋全テスト | 独立のレビュー＋全テスト | 独立のレビュー（high）＋全テスト＋ ChatGPT の2人目 |
+| マージ | 統括 | 統括（本人の許可を記録） | 統括（マージの前に本人の確認） |
+:::
+
+ChatGPTの2人目のレビューは判断の材料で、合格の条件ではありません。指摘は、タスク担当が根拠と照らして採否を決めます。
 
 ## 守ること
 
+:::danger エージェントの中から `agy` を呼ばない
+Antigravityの規約は、第三者のエージェントやアプリで `agy` を包む使い方を、個人のプランで認めていません。shipcastの `antigravity` の経路は、`CLAUDECODE`・`AI_AGENT`・`ORCA_AGENT_SESSION_ID`・`CODEX_` で始まる環境変数があると、呼ばずに止まります。試験とハッカソンの作業は `fake` の経路を使います。本物の経路で日誌を書くのは、本人の手動の実行と、launchdの夜の処理だけです。
+:::
+
 :::warning 外へ出さない・書き換えない
 - shipcastは、X・note・Redditへ投稿しません。下書きまでです
-- 対象のrepositoryは読むだけです（fetch、checkout、indexの書換えをしません）
-- 秘密情報らしい文字列は、モデルに渡す前に伏せます
-- Antigravityの規約に合わせ、エージェントの中からは `agy` を呼びません。呼ぶのはshipcastの夜の処理と本人の手動の実行だけです
+- 対象のrepositoryは読むだけです（`git fetch`、checkout、indexの書換えをしません）
+- 秘密情報らしい文字列は、外部のモデルに渡す前に、共通の入口で必ず伏せます
+- repositoryはpublicです。見本のデータは架空のものにします
+:::
+
+:::risks
+| リスク | 影響 | 起きやすさ | 対策 |
+|---|---|---|---|
+| 秘密情報が外部のモデルに渡る | 高 | 低 | 共通の入口で必ず伏せ、伏せる処理が失敗したら送らない（iss-00014） |
+| 配信から置き場の外のファイルが返る | 高 | 低 | pathを解決してから置き場の中かを確かめ、CSPを付ける（iss-00017） |
+| Antigravityの規約が変わる | 中 | 中 | 2026-12-19 に読み直し、書き手を設定で差し替えられるようにしておく |
+| 外付けvolumeがlaunchdから読めない（TCC） | 中 | 中 | 理由とフルディスクアクセスの付け方を実行の記録に添える（iss-00021） |
+| 安いモデルの分析が浅い | 中 | 中 | 分析のモデルを設定で選べるようにし、本人の手動の実行で質を確かめる |
 :::
 
 ## 確かめ方
 
-```sh
-uv run shipcast repo add /path/to/shipcast
-uv run shipcast run --date 2026-11-26
-uv run shipcast serve   # http://127.0.0.1:8765/
-```
+:::terminal title="ハッカソンの最後に見せる確かめ"
+$ uv run shipcast repo add /path/to/shipcast
+# shipcast自身を登録する（SpecDockを使うrepositoryだけを足せる）
+$ uv run shipcast run --date 2026-11-26
+# 集める → まとめる → 書く。試験と予行は fake の経路
+$ uv run shipcast serve
+# http://127.0.0.1:8765/ で表紙・一覧・その日の日誌を読む
+:::
 
-ハッカソンでは、E1〜E4が動き、shipcast自身の日誌がWebページで読めれば成功です。
+:::success 成功の条件
+E1〜E4が動き、shipcast自身の日誌が `shipcast serve` で読めること。そして各IssueのPRが、仕様のレビュー・最終品質ゲート・CIに合格して、統括にマージされていること。E5・E6は時間があれば進めます。
+:::
 </script>
 <script src="../../../design-system/ds.js"></script>
 </head>
