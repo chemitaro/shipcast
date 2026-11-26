@@ -27,11 +27,21 @@ ID: "iss-00008"
   - P2：葉を付けない `shipcast repo`・`draft`・`schedule` の動きが決まっておらず、試験もない。実装担当への申し送り：D-02 の「下位のコマンドなしは使い方を示して2」と同じに扱い（argparseの必須でないsubparsersで `func` が無いまま進まないようにする）、T-05 の中で確かめてよい（実装の裁量。`## 逸脱と判断` に記録する）
   - P3：`decisions` の「終了コード2は epic-00002 の設計のとおり」の出典は、epic-00002 の設計には書かれていない（以前の iss-00008 の設計にあった値）。値そのものはこのIssueの中で一貫している
 
+### 最終品質ゲート（2026-11-26）
+
+- 結果：**合格**（1回目。P0 0件、P1 0件、P2 0件、P3 0件、coverage complete）
+- 合格のコミット：`67655991b9eef113183293dcfeaf355f8b136851`（範囲 `606bec3..6765599`、S-01〜S-04）
+- レビュアー：Claude `quality-gate-reviewer`（Opus 5.5 / medium）。観点 functional-correctness、requirements-closure、test-adequacy。second_opinion none（light）
+- テスト：`uv sync --locked`、`uv run ruff check`、`uv run pytest -q`（25 passed）、`uv run shipcast --help` がすべて exit 0
+- 記録：shipcastの `.workbench/final-quality-gate/iss-00008-fqg-1/closure.md`
+- `plan.cue` は仕様レビューの合格後に、各 step の `status: "done"` を足しただけ（中身の変更なし）
+
 ## Outcome
 
 - S-01 `674fc50249184ddbe1632efaef8b865ef2c5d4ff` で Python 3.12、uv の package、開発依存、lockfile、Ruff と pytest の設定を追加。
 - S-02 `a984a9c10321b407dee8723c72fc245d6ae8c90b` で CLI と7つのコマンド、9つの未実装の葉を登録。コンソールスクリプトと `python -m shipcast` に同じ入口を使用。
 - S-03 `07fe2f495f26a1d30dbc44b1bbf563e3b954510a` で GitHub Actions の検証 workflow と T-07 を追加。
+- S-04 `67655991b9eef113183293dcfeaf355f8b136851`（タスク担当、同じセッションの例外）で `AGENTS.md` の「Gitと検証」に検証の3つのcommand、`fake` の経路と `agy` を呼ばない約束、CIの合格を見てからのマージを書き、T-06 の試験を足した。
 
 ## Verification
 
@@ -41,13 +51,16 @@ ID: "iss-00008"
 - S-03 は `uv run pytest -q tests/test_cli.py::test_ci_runs_local_checks_for_pull_requests_and_main_pushes` で Red が1件（workflow ファイルなし）、Green が1件。
 - S-03 のコミットで指定4コマンドがすべて0。pytest は24件合格。CLI のヘルプは7コマンドを表示。Git の差分チェックに合格し、仕様3ファイルの SHA-256 はレビュー記録と一致。
 - D-05 のリリース確認で `actions/checkout` v7.0.1、`astral-sh/setup-uv` v10.4.0 を取得し、指定のメジャー版 `v7` と `v10` を採用。
+- S-04 は T-06 を先に書いて Red（1件失敗）を確かめ、`AGENTS.md` を書いて Green（25件合格）。
 
 ## 逸脱と判断
 
 - P2 の申し送りに従い、`repo`、`draft`、`schedule` に下位コマンドがなければ、そのコマンドの使い方を標準エラーに出して2で終了する。T-05 で3件を検証した。
 - 新しい Ruff 設定を適用すると、既存の `.agents/skills/spec-dock-grill-with-docs/scripts/finalize-artifact.py` から14件の指摘が出た。shipcast の検査で既存のエージェント用ツールが対象になるのを避けるため、Ruff の `extend-exclude` に `.agents` を指定した。
+- S-04 の `AGENTS.md` の文は D-04 のとおりだが、このファイルの表記に合わせて、コードと和文の間の空白を入れていない（`` `fake`を使い、`agy`を呼ばない ``）。意味は同じ。
 - 外部モデルを呼ばないというタスクの指示に従い、git-autocommit によるメッセージ生成を省き、各ステップを通常の Git コミットにした。
 
 ## Residual Risks / Follow-ups
 
-- S-04 の AGENTS.md と T-06、PR 上での GitHub Actions 実行結果 T-08 はタスク担当に引き継ぐ。
+- T-08（PR上のCIの合格）は PR を作った後に観測して追記する。
+- マージと `spec-dock work finish` は統括が行う。
