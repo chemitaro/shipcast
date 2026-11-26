@@ -4,14 +4,14 @@ goal: "先に台帳への加算と未消化の話題の読み出しを `Store` �
 
 steps: {
 	"S-01": {
-		status:   "todo"
+		status:   "done"
 		title:    "台帳への加算（`save_stories`）と `unconsumed_stories`"
 		text:     "D-01。T-01・T-02 を `tests/test_state.py`・`tests/test_analyze.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/state.py` を直して通す（Green）。`tests/test_analyze.py` の `assert store.unconsumed_neta(REPO) == []`（分析の後に台帳が空という今の期待）は、R-01 に合わせて話題の id の一覧に改める。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01"]
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "todo"
+		status:   "done"
 		title:    "「発信の芽」の部品（`NetaSprout`）と CLI への配線"
 		text:     "D-02・D-03。T-03・T-04 を `tests/test_neta.py`・`tests/test_write.py` に先に書いて Red、`src/shipcast/neta.py` と `src/shipcast/write.py` の `journal_extensions`・`run` を書いて Green。`cli.py` は変えない。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-02"]

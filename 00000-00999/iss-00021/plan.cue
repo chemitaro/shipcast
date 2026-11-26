@@ -4,14 +4,14 @@ goal: "新しい `run.py` に、CLI・日の決め方・repositoryごとの処�
 
 steps: {
 	"S-01": {
-		status:   "doing"
+		status:   "done"
 		title:    "run のコマンドと記録（`run.py` の `configure`・`run`・`previous_day`、`cli.py` の接続）"
 		text:     "D-01・D-03。T-01・T-02・T-03・T-04 を `tests/test_run.py` に先に書いて落ちることを確かめ（Red）、`src/shipcast/run.py` に `previous_day`・`configure`・`run`・`journal_extensions_for`（lock なし、TCC の案内なし、読み取りの確かめなし）を書き、`cli.py` の `run` の葉に `run_command.configure` を渡し、`tests/test_cli.py` の未実装の一覧から `run` を外して通す（Green）。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["R-01", "R-02"]
 		session:  "impl"
 	}
 	"S-02": {
-		status:   "todo"
+		status:   "doing"
 		title:    "lock（`run_lock`）と TCC の見分け（`with_tcc_hint`）"
 		text:     "D-02・D-04。T-05・T-06・T-07 を先に書いて Red、`LOCK_FILENAME`・`run_lock`・`TCC_MARKER`・`with_tcc_hint`・`probe_readable` を書き、`run` の手順4と D-03 の手順0と誤りの文につないで Green。完了の条件：`test_commands` がすべて終了コード0。"
 		realizes: ["F-01", "F-02"]
