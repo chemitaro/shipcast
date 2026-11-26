@@ -8,7 +8,7 @@ steps: {
 		text:     "D-02、D-05。`tests/fixtures/specdock/` に `scope-list.json`・`todo-list.json`・`gh-issue-list.json` を、D-02 の項目の名前と入れ子のまま、架空の値で書く。見本には T-01・T-02 の場合（日の境の4つの時刻、前の日に登録してその日に完了したtodo、その日に登録して取り消したtodo、サブタスク、`number` のないScope、`backend` が local のScope、再び開いたIssue）を入れる。`tests/test_collect_specdock.py` に、見本を読んで argv ごとに返し、argv を記録する偽物の `subprocess.run` と、`spec-dock/workspace.json` を置いた `tmp_path` のrepositoryを作る補助を書く。完了の条件：見本がJSONとして読め、実際の出力から写した値（手元の題名、path、repository名）がないこと（`rg` で確かめる）。`uv run ruff check` が通る。"
 		realizes: ["R-03"]
 		session:  "impl"
-		status:   "todo"
+		status:   "doing"
 	}
 	"S-02": {
 		title:    "`SpecDockCollector`（`shipcast.collect.specdock`）と登録"
